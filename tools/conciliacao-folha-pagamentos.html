@@ -228,13 +228,13 @@ code.k{ background:var(--surface-alt); border:1px solid var(--border); padding:1
       <div class="step-num">1</div>
       <div>
         <h2>Documentos do mês</h2>
-        <p class="step-sub">Anexe tudo de uma vez: Relação de Líquidos (.xlsx), razões de Salários a Pagar e de Adiantamento (.csv) e as folhas (.txt). Cada arquivo é reconhecido sozinho. Nada é enviado a servidor.</p>
+        <p class="step-sub">Anexe tudo de uma vez: Relação de Líquidos (.xlsx), razões de Salários a Pagar e de Adiantamento (.csv) e as folhas (.pdf ou .txt). Cada arquivo é reconhecido sozinho. Nada é enviado a servidor.</p>
       </div>
     </div>
     <div class="dropzone" id="dz" tabindex="0">
       <strong>Clique ou arraste todos os documentos aqui</strong>
       <span>Dá para soltar vários arquivos juntos</span>
-      <input type="file" id="in-docs" multiple accept=".xlsx,.xls,.csv,.txt" hidden>
+      <input type="file" id="in-docs" multiple accept=".xlsx,.xls,.csv,.txt,.pdf" hidden>
     </div>
     <div class="docs-lista" id="docs-lista"></div>
     <div class="checklist" id="docs-check"></div>
@@ -882,6 +882,55 @@ function papelDoRazao(raz){
   if (cod === '1.1.3.01.0002' || /ADIANT/.test(nome)) return 'razAdt';
   throw new Error('conta do razão não reconhecida (' + (cod || 'sem código') + '); esperado 2.1.1.01.0001 ou 1.1.3.01.0002');
 }
+
+// ---- PDF da folha -> texto (pdf.js carregado só quando precisa) ----
+const PDFJS_BASE = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+let _pdfjsP = null;
+function carregarPdfJs(){
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (_pdfjsP) return _pdfjsP;
+  _pdfjsP = new Promise((ok, erro) => {
+    const sc = document.createElement('script');
+    sc.src = PDFJS_BASE + 'pdf.min.js';
+    sc.onload = () => window.pdfjsLib ? ok(window.pdfjsLib) : erro(new Error('leitor de PDF não carregou'));
+    sc.onerror = () => { _pdfjsP = null; erro(new Error('não consegui carregar o leitor de PDF (internet bloqueada?). Alternativa: anexe o texto da folha (.txt)')); };
+    document.head.appendChild(sc);
+  });
+  return _pdfjsP;
+}
+async function pdfParaTexto(buf){
+  const lib = await carregarPdfJs();
+  try{
+    // worker via blob (evita bloqueio de worker em outro domínio)
+    const r = await fetch(PDFJS_BASE + 'pdf.worker.min.js');
+    const blob = new Blob([await r.text()], { type:'text/javascript' });
+    lib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+  }catch(_){ lib.GlobalWorkerOptions.workerSrc = PDFJS_BASE + 'pdf.worker.min.js'; }
+  const pdf = await lib.getDocument({ data: new Uint8Array(buf) }).promise;
+  const linhasTodas = [];
+  for (let p = 1; p <= pdf.numPages; p++){
+    const pag = await pdf.getPage(p);
+    const tc = await pag.getTextContent();
+    const itens = tc.items.filter(it => it.str !== undefined && String(it.str).trim() !== '')
+      .map(it => ({ s:it.str, x:it.transform[4], y:it.transform[5], w:it.width || 0 }));
+    itens.sort((a, b) => b.y - a.y || a.x - b.x);
+    const linhas = [];
+    for (const it of itens){
+      const L = linhas[linhas.length - 1];
+      if (L && Math.abs(L.y - it.y) <= 2.5) L.it.push(it); else linhas.push({ y:it.y, it:[it] });
+    }
+    for (const L of linhas){
+      L.it.sort((a, b) => a.x - b.x);
+      let txt = '', fim = null;
+      for (const it of L.it){
+        if (fim !== null && it.x - fim > 1.2 && !/\s$/.test(txt)) txt += ' ';
+        txt += it.s; fim = it.x + it.w;
+      }
+      linhasTodas.push(txt.replace(/\s+/g, ' ').trim());
+    }
+  }
+  return linhasTodas.join('\n');
+}
 async function classificar(f){
   const ext = (f.name.split('.').pop() || '').toLowerCase();
   const buf = await f.arrayBuffer();
@@ -892,14 +941,16 @@ async function classificar(f){
     if (raz.meta.ano && raz.meta.mesFim){ $('cfg-data').value = raz.meta.ano + '-' + pad2(raz.meta.mesFim) + '-' + pad2(raz.meta.diaFim || 28); $('cfg-emp').value = parseInt(raz.emp, 10) || 1; }
     return;
   }
-  if (ext === 'txt'){
-    const fol = parseFolha(decodeBytesToText(buf), f.name);
+  if (ext === 'txt' || ext === 'pdf'){
+    const texto = ext === 'pdf' ? await pdfParaTexto(buf) : decodeBytesToText(buf);
+    const fol = parseFolha(texto, f.name);
+    if (ext === 'pdf' && !fol.total) throw new Error('não encontrei colaboradores no PDF (é a Relação de Cálculo da folha? se for imagem escaneada, não dá para ler)');
     const k = fol.periodo ? fol.periodo.ano * 12 + fol.periodo.mes : f.name;
     estado.folhas = estado.folhas.filter(x => (x.periodo ? x.periodo.ano * 12 + x.periodo.mes : x.arquivo) !== k);
     estado.folhas.push(fol);
     return;
   }
-  throw new Error('tipo de arquivo não reconhecido (use .xlsx, .csv ou .txt)');
+  throw new Error('tipo de arquivo não reconhecido (use .xlsx, .csv, .pdf ou .txt)');
 }
 async function receberArquivos(lista){
   estado.erros = [];
