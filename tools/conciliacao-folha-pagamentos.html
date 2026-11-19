@@ -1,0 +1,1080 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="hub-nome" content="Conciliação Folha e Adiantamento">
+<meta name="hub-descricao" content="Anexe os documentos do mês (líquidos, razões e folhas), veja as pendências de Salários a Pagar e Adiantamento e baixe a planilha de importação dos ajustes.">
+<meta name="hub-icone" content="💸">
+<meta name="hub-categoria" content="Folha de Pagamento">
+<title>Conciliação Pagamentos da Folha</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#f5f7f5;
+  --surface:#ffffff;
+  --surface-alt:#eef2ef;
+  --ink:#182420;
+  --muted:#5c6f68;
+  --border:#dbe3de;
+  --accent:#0f5d52;
+  --accent-strong:#0b453d;
+  --accent-ink:#f4fbf9;
+  --accent-soft:#e0efec;
+  --danger:#b3261e;
+  --danger-soft:#fbe9e6;
+  --warning:#8a5a00;
+  --warning-soft:#fff1d9;
+  --success:#1e7d4a;
+  --success-soft:#e5f4ea;
+  --tag-debito-bg:#fff1d9;
+  --tag-debito-ink:#8a5a00;
+  --tag-credito-bg:#e3edfb;
+  --tag-credito-ink:#1b4f8a;
+  --shadow: 0 1px 2px rgba(15,30,25,.06), 0 8px 24px -12px rgba(15,30,25,.22);
+  --radius:14px;
+  --font-display:'IBM Plex Sans Condensed', 'IBM Plex Sans', sans-serif;
+  --font-body:'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono:'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9;
+    --muted:#94a6a0; --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6;
+    --accent-ink:#08201b; --accent-soft:#1a332d; --danger:#ff9d93; --danger-soft:#3a201d;
+    --warning:#ffcf70; --warning-soft:#3a2c12; --success:#8fe3ac; --success-soft:#173425;
+    --tag-debito-bg:#3a2c12; --tag-debito-ink:#ffcf70; --tag-credito-bg:#182b3d; --tag-credito-ink:#8fc2ff;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9;
+  --muted:#94a6a0; --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6;
+  --accent-ink:#08201b; --accent-soft:#1a332d; --danger:#ff9d93; --danger-soft:#3a201d;
+  --warning:#ffcf70; --warning-soft:#3a2c12; --success:#8fe3ac; --success-soft:#173425;
+  --tag-debito-bg:#3a2c12; --tag-debito-ink:#ffcf70; --tag-credito-bg:#182b3d; --tag-credito-ink:#8fc2ff;
+  --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+}
+
+*{ box-sizing:border-box; }
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--font-body);
+  margin:0; padding-inline:16px; padding-block:20px 60px;
+}
+h1,h2,h3{ font-family:var(--font-display); font-weight:700; text-wrap:balance; margin:0; }
+h3{ font-size:15px; }
+.mono{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+.app-shell{ max-width:1180px; margin:0 auto; }
+
+.topbar{
+  position:sticky; top:env(safe-area-inset-top,0px); z-index:30;
+  background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--border); margin:-20px -16px 28px; padding:16px;
+}
+.topbar-inner{ max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:14px 24px; justify-content:space-between; }
+.brand{ display:flex; align-items:center; gap:12px; }
+.brand-mark{
+  width:38px; height:38px; border-radius:10px; background:var(--accent); color:var(--accent-ink);
+  display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-weight:700; font-size:15px;
+  box-shadow:var(--shadow); flex:none;
+}
+.brand h1{ font-size:19px; letter-spacing:.2px; }
+.brand p{ margin:2px 0 0; font-size:12.5px; color:var(--muted); }
+.steps-pills{ display:flex; gap:8px; flex-wrap:wrap; }
+.step-pill{
+  font-family:var(--font-mono); font-size:11.5px; letter-spacing:.03em; padding:6px 11px; border-radius:999px;
+  border:1px solid var(--border); color:var(--muted); background:var(--surface); white-space:nowrap;
+}
+.step-pill.is-active{ border-color:var(--accent); color:var(--accent-strong); background:var(--accent-soft); font-weight:600; }
+.step-pill.is-done{ color:var(--success); border-color:var(--success); }
+
+.step-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:26px; margin-bottom:22px; box-shadow:var(--shadow);
+}
+.step-card[data-locked="true"]{ opacity:.45; pointer-events:none; }
+.step-head{ display:flex; align-items:flex-start; gap:14px; margin-bottom:18px; }
+.step-num{
+  width:32px; height:32px; border-radius:9px; background:var(--surface-alt); color:var(--ink);
+  font-family:var(--font-mono); font-weight:600; font-size:14px; display:flex; align-items:center; justify-content:center; flex:none;
+  border:1px solid var(--border);
+}
+.step-head h2{ font-size:20px; }
+.step-head .step-sub{ margin:3px 0 0; color:var(--muted); font-size:13.5px; max-width:64ch; }
+
+.drop-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; }
+.drop-slot h3{ margin-bottom:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.drop-slot .opt{ font-family:var(--font-mono); font-size:10.5px; font-weight:600; color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:2px 8px; text-transform:uppercase; letter-spacing:.04em; }
+.dropzone{
+  border:1.5px dashed var(--border); border-radius:12px; padding:26px 16px; text-align:center;
+  background:var(--surface-alt); cursor:pointer; transition:border-color .15s, background .15s;
+}
+.dropzone:hover, .dropzone.is-dragover{ border-color:var(--accent); background:var(--accent-soft); }
+.dropzone strong{ display:block; font-size:14px; margin-bottom:4px; }
+.dropzone span{ font-size:12.5px; color:var(--muted); }
+.file-chip{
+  display:inline-flex; align-items:center; gap:8px; margin-top:12px; padding:7px 12px; border-radius:9px;
+  background:var(--accent-soft); color:var(--accent-strong); font-size:13px; font-family:var(--font-mono); max-width:100%; overflow-wrap:anywhere;
+}
+.field-row{ display:flex; flex-wrap:wrap; gap:16px; margin-top:16px; }
+.field{ display:flex; flex-direction:column; gap:5px; min-width:190px; flex:1; }
+.field label{ font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.02em; text-transform:uppercase; }
+select, input[type="text"], input[type="number"], input[type="date"]{
+  font-family:var(--font-body); font-size:13.5px; padding:9px 10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--surface); color:var(--ink); width:100%;
+}
+select:focus, input:focus, button:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+
+.table-wrap{ overflow:auto; max-height:520px; border:1px solid var(--border); border-radius:10px; margin-top:14px; }
+table{ border-collapse:collapse; width:100%; font-size:13px; }
+thead th{
+  position:sticky; top:0; background:var(--surface-alt); text-align:left; padding:9px 10px; font-size:11.5px;
+  text-transform:uppercase; letter-spacing:.04em; color:var(--muted); border-bottom:1px solid var(--border); white-space:nowrap;
+}
+tbody td{ padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+tbody tr:last-child td{ border-bottom:none; }
+tbody tr:hover td{ background:var(--surface-alt); }
+th.num, td.num{ text-align:right; }
+tfoot td{ padding:9px 10px; font-weight:700; background:var(--surface-alt); border-top:1px solid var(--border); white-space:nowrap; }
+
+button{ font-family:var(--font-body); cursor:pointer; border:none; border-radius:9px; font-weight:600; font-size:13.5px; }
+.btn-primary{ background:var(--accent); color:var(--accent-ink); padding:11px 20px; box-shadow:var(--shadow); }
+.btn-primary:disabled{ opacity:.45; cursor:not-allowed; box-shadow:none; }
+.btn-secondary{ background:var(--surface-alt); color:var(--ink); border:1px solid var(--border); padding:10px 16px; }
+.btn-secondary:disabled{ opacity:.45; cursor:not-allowed; }
+.btn-ghost{ background:transparent; color:var(--muted); border:1px solid var(--border); padding:7px 10px; font-size:12px; }
+.btn-icon{ background:var(--surface-alt); border:1px solid var(--border); color:var(--ink); width:28px; height:28px; border-radius:7px; display:inline-flex; align-items:center; justify-content:center; padding:0; }
+.actions-row{ display:flex; flex-wrap:wrap; gap:12px; margin-top:18px; align-items:center; }
+.hint{ font-size:12.5px; color:var(--muted); }
+.hint.warn{ color:var(--warning); }
+.hint.err{ color:var(--danger); }
+
+.summary-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:18px; }
+.summary-tile{ background:var(--surface-alt); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+.summary-tile .n{ font-family:var(--font-mono); font-size:20px; font-weight:600; overflow-wrap:anywhere; }
+.summary-tile .l{ font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin-top:2px; }
+.summary-tile.accent{ background:var(--accent-soft); }
+.summary-tile.accent .n{ color:var(--accent-strong); }
+.summary-tile.warn .n{ color:var(--warning); }
+.summary-tile.bad .n{ color:var(--danger); }
+
+.tag{ display:inline-flex; align-items:center; gap:5px; font-family:var(--font-mono); font-size:11.5px; font-weight:600; padding:4px 9px; border-radius:999px; white-space:nowrap; }
+.tag-debito{ background:var(--tag-debito-bg); color:var(--tag-debito-ink); }
+.tag-credito{ background:var(--tag-credito-bg); color:var(--tag-credito-ink); }
+.tag-ok{ background:var(--success-soft); color:var(--success); }
+.tag-dif{ background:var(--danger-soft); color:var(--danger); }
+.tag-aviso{ background:var(--warning-soft); color:var(--warning); }
+
+.empty-state{ text-align:center; padding:34px 16px; color:var(--success); }
+.empty-state .big{ font-size:28px; }
+
+fieldset{ border:1px solid var(--border); border-radius:10px; padding:16px; margin:0 0 16px; }
+legend{ padding:0 6px; font-size:12.5px; font-weight:700; color:var(--accent-strong); text-transform:uppercase; letter-spacing:.03em; }
+
+.alert{ border-radius:10px; padding:12px 14px; font-size:13px; margin-top:14px; border:1px solid var(--border); }
+.alert.err{ background:var(--danger-soft); color:var(--danger); border-color:var(--danger); }
+.alert.warn{ background:var(--warning-soft); color:var(--warning); border-color:var(--warning); }
+.alert.ok{ background:var(--success-soft); color:var(--success); border-color:var(--success); }
+.alert strong{ font-weight:700; }
+
+.two-col{ display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:18px; margin-top:6px; }
+.bridge td:first-child{ white-space:normal; }
+.bridge tr.total td{ font-weight:700; background:var(--surface-alt); }
+.toolbar{ display:flex; flex-wrap:wrap; gap:12px; align-items:end; margin-top:18px; }
+.toolbar .field{ min-width:160px; flex:0 1 220px; }
+td input[type="checkbox"]{ width:16px; height:16px; accent-color:var(--accent); }
+
+.grp{ margin:0 0 10px; font-size:12.5px; color:var(--accent-strong); text-transform:uppercase; letter-spacing:.04em; display:flex; align-items:center; gap:8px; }
+.docs-lista{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:14px; }
+.docs-lista .file-chip{ margin-top:0; }
+.docs-lista .file-chip .btn-icon{ width:22px; height:22px; font-size:14px; line-height:1; }
+.checklist{ display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:12px; font-size:12.5px; color:var(--muted); }
+.checklist .ok{ color:var(--success); font-weight:600; }
+.resumo-linhas{ font-size:13.5px; margin-bottom:14px; display:grid; gap:4px; }
+details.cfg{ border:1px solid var(--border); border-radius:10px; padding:10px 14px; background:var(--surface-alt); }
+details.cfg summary{ cursor:pointer; font-size:13px; font-weight:600; color:var(--muted); }
+details.cfg[open] summary{ margin-bottom:12px; color:var(--ink); }
+.lista-simples{ margin:0; padding-left:18px; font-size:12.5px; color:var(--muted); display:grid; gap:3px; }
+td.wrap{ white-space:normal; min-width:240px; }
+.sub{ font-size:11.5px; color:var(--muted); margin-top:2px; }
+tr.info td{ background:var(--warning-soft); }
+.toast-host{ position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom,0px)); z-index:60; display:flex; flex-direction:column; gap:8px; max-width:min(360px, calc(100vw - 32px)); }
+.toast{ background:var(--ink); color:var(--bg); padding:11px 14px; border-radius:9px; font-size:13px; box-shadow:var(--shadow); animation:toast-in .18s ease-out; }
+.toast.toast-err{ background:var(--danger); color:#fff; }
+.toast.toast-ok{ background:var(--success); color:#08201b; }
+@keyframes toast-in{ from{ transform:translateY(6px); opacity:0; } to{ transform:none; opacity:1; } }
+
+code.k{ background:var(--surface-alt); border:1px solid var(--border); padding:1px 5px; border-radius:5px; font-family:var(--font-mono); font-size:12px; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-mark">FP</div>
+        <div>
+          <h1>Conciliação da Folha e Adiantamento</h1>
+          <p>Salários a Pagar e Adiantamento a Funcionários × folha</p>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section class="step-card" id="card-docs">
+    <div class="step-head">
+      <div class="step-num">1</div>
+      <div>
+        <h2>Documentos do mês</h2>
+        <p class="step-sub">Anexe tudo de uma vez: Relação de Líquidos (.xlsx), razões de Salários a Pagar e de Adiantamento (.csv) e as folhas (.txt). Cada arquivo é reconhecido sozinho. Nada é enviado a servidor.</p>
+      </div>
+    </div>
+    <div class="dropzone" id="dz" tabindex="0">
+      <strong>Clique ou arraste todos os documentos aqui</strong>
+      <span>Dá para soltar vários arquivos juntos</span>
+      <input type="file" id="in-docs" multiple accept=".xlsx,.xls,.csv,.txt" hidden>
+    </div>
+    <div class="docs-lista" id="docs-lista"></div>
+    <div class="checklist" id="docs-check"></div>
+    <div id="docs-erros"></div>
+  </section>
+
+  <section class="step-card" id="card-resumo">
+    <div class="step-head">
+      <div class="step-num">2</div>
+      <div><h2>Resumo das pendências</h2></div>
+    </div>
+    <div id="resumo"></div>
+  </section>
+
+  <section class="step-card" id="card-final">
+    <details class="cfg" style="margin-bottom:16px">
+      <summary>Contas, data e empresa dos lançamentos</summary>
+      <div class="field-row" style="margin-top:0">
+        <div class="field"><label for="cfg-emp">Código da empresa</label><input type="number" id="cfg-emp" value="1" min="1"></div>
+        <div class="field"><label for="cfg-data">Data do lançamento</label><input type="date" id="cfg-data" value="" ></div>
+        <div class="field"><label for="cfg-hist">Código histórico padrão</label><input type="text" id="cfg-hist" value="" placeholder="opcional"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label for="cfg-sal">Salários a Pagar</label><input type="text" id="cfg-sal" value="2.1.1.01.0001" ></div>
+        <div class="field"><label for="cfg-pensao">Pensão alimentícia</label><input type="text" id="cfg-pensao" value="2.1.1.01.0009" ></div>
+        <div class="field"><label for="cfg-notif">Notificação judicial</label><input type="text" id="cfg-notif" value="2.1.1.01.0015" ></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label for="cfg-maior">Folha: demais pago a maior</label><input type="text" id="cfg-maior" value="3.1.3.01.0029" ></div>
+        <div class="field"><label for="cfg-semfolha">Folha: pagamento sem funcionário</label><input type="text" id="cfg-semfolha" value="3.1.3.01.0029" ></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label for="cfg-adt">Adiantamento a Funcionários</label><input type="text" id="cfg-adt" value="1.1.3.01.0002" ></div>
+        <div class="field"><label for="cfg-adtdesp">Adiantamento pago a mais (despesa)</label><input type="text" id="cfg-adtdesp" value="3.1.3.01.0029" ></div>
+        <div class="field"><label for="cfg-caixa">Adiantamento pago pelo caixa</label><input type="text" id="cfg-caixa" value="1.1.1.01.0003" ></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label for="cfg-compl">Complemento</label><input type="text" id="cfg-compl" value="{TIPO} {MM}/{AAAA} - {NOME}" ></div>
+      </div>
+      <p class="hint" style="margin:10px 0 0">No complemento use <code class="k">{TIPO}</code>, <code class="k">{NOME}</code>, <code class="k">{CAD}</code>, <code class="k">{MM}</code> e <code class="k">{AAAA}</code>. As contas ficam salvas neste navegador.</p>
+    </details>
+    <div class="actions-row" style="margin-top:0">
+      <button class="btn-primary" id="btn-lanc" disabled>Baixar planilha de importação (.xlsx)</button>
+      <span class="hint warn" id="hint-final"></span>
+    </div>
+  </section>
+
+</div>
+<div class="toast-host" id="toasts"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+// ===== Ponte de capacidades (Painel de Automação) =====
+(function(){
+  if (window.top === window.self) return;
+  if (window.claude && window.claude.use) return;
+  let proximoId = 1;
+  const pendentes = {};
+  window.addEventListener('message', (ev) => {
+    const msg = ev.data;
+    if (!msg || msg.__ponteClaude !== true || msg.tipo !== 'resposta') return;
+    const p = pendentes[msg.id];
+    if (!p) return;
+    delete pendentes[msg.id];
+    if (msg.erro) p.reject(msg.erro); else p.resolve(msg.resultado);
+  });
+  function chamarHub(acao, payload){
+    return new Promise((resolve, reject) => {
+      const id = proximoId++;
+      pendentes[id] = { resolve, reject };
+      window.parent.postMessage({ __ponteClaude: true, tipo: 'chamada', id, acao, payload }, '*');
+    });
+  }
+  window.claude = {
+    use: async (nome) => {
+      if (nome !== 'downloads') return null;
+      return { save: (req) => chamarHub('downloads.save', req) };
+    }
+  };
+})();
+
+async function salvarArquivo(filename, blob){
+  if (typeof window.claude !== 'undefined' && typeof window.claude.use === 'function'){
+    try{
+      const downloads = await window.claude.use('downloads');
+      if (downloads){ await downloads.save({ filename, data: blob }); return true; }
+    }catch(err){
+      alert('Não foi possível salvar o arquivo (' + (err && (err.code || err.message) || 'erro') + ').');
+      return false;
+    }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  return true;
+}
+
+// ===================== Utilidades =====================
+const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const r2 = x => Math.round((x + Number.EPSILON) * 100) / 100;
+const fmt = x => (Number(x) || 0).toLocaleString('pt-BR', { minimumFractionDigits:2, maximumFractionDigits:2 });
+const pad2 = n => String(n).padStart(2, '0');
+
+function numBR(v){                       // "4.024,34" -> 4024.34
+  if (typeof v === 'number') return v;
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return 0;
+  const n = parseFloat(s.replace(/\./g, '').replace(',', '.'));
+  return isNaN(n) ? 0 : n;
+}
+function numAuto(v){                     // aceita número, "4488.78" ou "4.488,78"
+  if (typeof v === 'number') return v;
+  const s = String(v == null ? '' : v).trim();
+  if (!s) return 0;
+  return s.indexOf(',') >= 0 ? numBR(s) : (parseFloat(s) || 0);
+}
+function decodeBytesToText(buffer){
+  try { return new TextDecoder('utf-8', { fatal:true }).decode(buffer); }
+  catch (e) { return new TextDecoder('windows-1252').decode(buffer); }
+}
+function serialToBR(n){
+  const d = new Date(Date.UTC(1899, 11, 30) + Math.round(n) * 86400000);
+  return pad2(d.getUTCDate()) + '/' + pad2(d.getUTCMonth() + 1) + '/' + d.getUTCFullYear();
+}
+function dataSerial(ano, mes, dia){ return Math.round((Date.UTC(ano, mes - 1, dia) - Date.UTC(1899, 11, 30)) / 86400000); }
+function colIdx(letras){ let n = 0; for (const ch of letras) n = n * 26 + (ch.charCodeAt(0) - 64); return n; }
+function idxCol(n){ let s = ''; while (n > 0){ const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; }
+function semAcento(s){ return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+function chaveTxt(s){ return semAcento(s).toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim(); }
+
+// ===================== Leitura da planilha (aceita ZIP fora do padrão) =====================
+const NS_R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+const parseXml = x => new DOMParser().parseFromString(x, 'application/xml');
+
+async function lerPlanilhaRobusta(buf){
+  const zip = await JSZip.loadAsync(buf);
+  const arq = {};
+  zip.forEach((p, f) => { if (!f.dir) arq[p.replace(/\\/g, '/').replace(/^\//, '')] = f; });
+  const ler = async n => arq[n] ? arq[n].async('string') : null;
+  const wbXml = await ler('xl/workbook.xml');
+  if (!wbXml) throw new Error('planilha inválida');
+  let caminho = null;
+  try{
+    const wbDoc = parseXml(wbXml), relDoc = parseXml((await ler('xl/_rels/workbook.xml.rels')) || '<r/>');
+    const primeira = wbDoc.getElementsByTagName('sheet')[0];
+    const rid = primeira && (primeira.getAttribute('r:id') || primeira.getAttributeNS(NS_R, 'id'));
+    for (const r of relDoc.getElementsByTagName('Relationship')){
+      if (r.getAttribute('Id') === rid){
+        const t = r.getAttribute('Target').replace(/\\/g, '/').replace(/^\//, '');
+        caminho = t.indexOf('xl/') === 0 ? t : 'xl/' + t;
+      }
+    }
+  }catch(e){ /* tenta o padrão abaixo */ }
+  if (!caminho || !arq[caminho]) caminho = Object.keys(arq).find(n => /^xl\/(worksheets\/)?sheet\d+\.xml$/.test(n));
+  if (!caminho) throw new Error('não achei a aba da planilha');
+  let sst = [];
+  const sstXml = await ler('xl/sharedStrings.xml');
+  if (sstXml) sst = [...parseXml(sstXml).getElementsByTagName('si')].map(si => [...si.getElementsByTagName('t')].map(t => t.textContent).join(''));
+  const doc = parseXml(await ler(caminho));
+  const linhas = [];
+  for (const row of doc.getElementsByTagName('row')){
+    const c = {};
+    for (const cel of row.getElementsByTagName('c')){
+      const ref = cel.getAttribute('r') || '', col = ref.replace(/\d+/g, ''), t = cel.getAttribute('t');
+      let v = null;
+      if (t === 'inlineStr') v = [...cel.getElementsByTagName('t')].map(x => x.textContent).join('');
+      else {
+        const ve = cel.getElementsByTagName('v')[0];
+        if (!ve) continue;
+        if (t === 's') v = sst[+ve.textContent];
+        else if (t === 'str' || t === 'e') v = ve.textContent;
+        else { const f = parseFloat(ve.textContent); v = isNaN(f) ? ve.textContent : f; }
+      }
+      if (v !== null && v !== '') c[col] = v;
+    }
+    if (Object.keys(c).length) linhas.push({ n:+row.getAttribute('r'), c });
+  }
+  return linhas;
+}
+async function lerLinhasXlsx(buf){
+  try{
+    const l = await lerPlanilhaRobusta(buf);
+    if (l.length) return l;
+  }catch(e){ /* cai para o SheetJS */ }
+  const wb = XLSX.read(new Uint8Array(buf), { type:'array' });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  const grid = XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:'' });
+  return grid.map((r, i) => { const c = {}; r.forEach((v, j) => { if (v !== '' && v != null) c[idxCol(j + 1)] = v; }); return { n:i + 1, c }; }).filter(x => Object.keys(x.c).length);
+}
+
+// ===================== Relação de Líquidos =====================
+async function parseRelacao(buf, nomeArquivo){
+  const linhas = await lerLinhasXlsx(buf);
+  if (!linhas.length) throw new Error('planilha vazia');
+  const topo = linhas[0].c;
+  const rel = { arquivo:nomeArquivo, empresa: topo.A != null ? String(topo.A) : '', nomeEmpresa: topo.C || '', funcionarios:[], totalInformado:null };
+  const hdr = linhas.find(l => Object.values(l.c).some(v => chaveTxt(v) === 'CADASTRO') && Object.values(l.c).some(v => chaveTxt(v) === 'VALOR'));
+  if (!hdr) throw new Error('não achei o cabeçalho (Cadastro, Nome, Valor). Este é o relatório “Relação Líquidos”?');
+  const col = {};
+  for (const [k, v] of Object.entries(hdr.c)){
+    const t = chaveTxt(v);
+    if (t === 'CADASTRO') col.cad = k; else if (t === 'NOME') col.nome = k; else if (t === 'VALOR') col.val = k;
+    else if (t === 'SITUACAO') col.sit = k; else if (t === 'PAGAMENTO') col.pag = k;
+  }
+  if (!col.cad || !col.nome || !col.val) throw new Error('faltam colunas no cabeçalho');
+  const colSitDesc = col.sit ? idxCol(colIdx(col.sit) + 1) : null;
+  for (const l of linhas){
+    if (l.n <= hdr.n) continue;
+    const c = l.c;
+    if (Object.values(c).some(v => /^TOTAL\s+EMPRESA/i.test(String(v)))){ rel.totalInformado = numAuto(c[col.val]); continue; }
+    const cad = c[col.cad];
+    if (cad == null || !/^\d+$/.test(String(cad).trim()) || c[col.nome] == null || c[col.val] == null) continue;
+    rel.funcionarios.push({
+      cad: parseInt(String(cad).trim(), 10),
+      nome: String(c[col.nome]).trim(),
+      situacao: String((colSitDesc && c[colSitDesc]) || (col.sit && c[col.sit]) || '').trim(),
+      pagamentoPrevisto: col.pag && typeof c[col.pag] === 'number' ? serialToBR(c[col.pag]) : '',
+      liquido: r2(numAuto(c[col.val])),
+    });
+  }
+  if (!rel.funcionarios.length) throw new Error('nenhum funcionário encontrado');
+  rel.soma = r2(rel.funcionarios.reduce((s, f) => s + f.liquido, 0));
+  rel.confere = rel.totalInformado == null || Math.abs(rel.totalInformado - rel.soma) < 0.02;
+  return rel;
+}
+
+// ===================== Razão de Salários a Pagar (CSV) =====================
+function splitCsv(linha){ return linha.split(';').map(x => x.trim().replace(/^"(.*)"$/, '$1').trim()); }
+function parseRazao(buf, nomeArquivo){
+  const texto = decodeBytesToText(buf);
+  const linhas = texto.split(/\r?\n/);
+  let hi = -1, idx = {};
+  for (let i = 0; i < Math.min(linhas.length, 80); i++){
+    const cs = splitCsv(linhas[i]).map(chaveTxt);
+    if (cs.indexOf('DTA LAN') >= 0 && cs.indexOf('DEBITO') >= 0 && cs.indexOf('CREDITO') >= 0){
+      hi = i;
+      cs.forEach((c, j) => {
+        if (c === 'DTA LAN') idx.data = j; else if (c === 'EMP') idx.emp = j; else if (c === 'TIP') idx.tip = j;
+        else if (c === 'DESC VLR') idx.desc = j; else if (c === 'C PARTIDA') idx.cp = j; else if (c.indexOf('HIST') === 0) idx.hist = j;
+        else if (c === 'PLANO CONTABIL') idx.plano = j; else if (c === 'DEBITO') idx.deb = j; else if (c === 'CREDITO') idx.cred = j; else if (c === 'SALDO INICIAL') idx.sini = j;
+        else if (c === 'SALDO') idx.saldo = j;
+      });
+      break;
+    }
+  }
+  if (hi < 0 || idx.data == null || idx.hist == null || idx.deb == null || idx.cred == null) throw new Error('não achei o cabeçalho do razão (DTA.LAN, HISTÓRICO, DÉBITO, CRÉDITO)');
+  const meta = { arquivo:nomeArquivo, empresaNome: splitCsv(linhas[0] || '')[0] || '', conta:'', contaNome:'', ano:null, mesIni:null, mesFim:null, diaFim:null };
+  for (let i = 0; i < hi; i++){
+    const t = splitCsv(linhas[i])[0] || '';
+    let m;
+    if ((m = /Ano Exerc[^:]*:\s*(\d{4})/i.exec(t))) meta.ano = +m[1];
+    if ((m = /Per[^:]*odo Inicial\s*:\s*(\d{2})\/(\d{2})/i.exec(t))) meta.mesIni = +m[2];
+    if ((m = /Per[^:]*odo Final\s*:\s*(\d{2})\/(\d{2})/i.exec(t))) { meta.diaFim = +m[1]; meta.mesFim = +m[2]; }
+    if ((m = /Plano Cont[^:]*bil\s*:\s*([\d\-.]+)\s+(.*)$/i.exec(t)) && !/\(/.test(t)) { meta.contaNome = m[2].trim(); }
+  }
+  const lanc = [];
+  let saldoIni = null, saldoFim = null, totalConta = null;
+  const sinal = (v, dc) => (/^D/i.test(dc || '') ? -1 : 1) * numBR(v);
+  for (let i = hi + 1; i < linhas.length; i++){
+    const c = splitCsv(linhas[i]);
+    const dt = c[idx.data] || '';
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dt)){
+      if (saldoIni === null && idx.sini != null) saldoIni = sinal(c[idx.sini], c[idx.sini + 1]);
+      if (!meta.conta && idx.plano != null && c[idx.plano]) { meta.conta = c[idx.plano]; meta.contaCod = c[idx.plano]; }
+      saldoFim = idx.saldo != null ? sinal(c[idx.saldo], c[idx.saldo + 1]) : saldoFim;
+      lanc.push({ data:dt, emp:c[idx.emp] || '', tip:c[idx.tip] || '', desc:c[idx.desc] || '', cp:c[idx.cp] || '', hist:c[idx.hist] || '', deb:numBR(c[idx.deb]), cred:numBR(c[idx.cred]) });
+    } else if (/TOTAL CONTA/i.test(c.join(' '))){
+      totalConta = c.filter(x => x !== '').slice(-4);
+    }
+  }
+  if (!lanc.length) throw new Error('o razão não tem lançamentos');
+  const pagamentos = [], outrosCtp = [];
+  let folDeb = 0, folCred = 0, outros = 0;
+  for (const l of lanc){
+    if (/^\s*PGTO\b/i.test(l.hist)){
+      let m = /^\s*PGTO\s+(\S+)\s*\/\s*(.*?)\s*\/\s*([^\/\s]+)\s*$/i.exec(l.hist), doc, nome, filial = '';
+      if (m){ doc = m[1]; nome = m[2]; filial = m[3]; }
+      else { m = /^\s*PGTO\s+(\S+)\s*\/?\s*(.*)$/i.exec(l.hist); doc = m ? m[1] : ''; nome = m ? m[2] : l.hist; }
+      pagamentos.push({ data:l.data, doc, nome:nome.trim(), filial, cp:l.cp, valor:r2(l.deb - l.cred), hist:l.hist });
+    } else if (l.tip === 'FOL'){ folDeb += l.deb; folCred += l.cred; }
+    else if (l.tip === 'CTP'){ outrosCtp.push(l); }
+    else outros += l.cred - l.deb;
+  }
+  const datas = pagamentos.map(p => p.data.split('/').reverse().join('')).sort();
+  return {
+    meta, pagamentos, outrosCtp,
+    saldoInicial: saldoIni == null ? 0 : r2(saldoIni), saldoFinal: saldoFim == null ? 0 : r2(saldoFim),
+    totalPagamentos: r2(pagamentos.reduce((s, p) => s + p.valor, 0)),
+    folNet: r2(folCred - folDeb), folDeb:r2(folDeb), folCred:r2(folCred), outros:r2(outros), totalConta,
+    primeiroPgto: datas.length ? datas[0].replace(/(\d{4})(\d{2})(\d{2})/, '$3/$2/$1') : '',
+    ultimoPgto: datas.length ? datas[datas.length - 1].replace(/(\d{4})(\d{2})(\d{2})/, '$3/$2/$1') : '',
+    emp: (lanc[0] && lanc[0].emp) || '1',
+  };
+}
+
+// ===================== Folha (texto do PDF) =====================
+// Lê, de cada colaborador: situação, centro de custo, líquido e, no primeiro bloco de eventos,
+// os eventos judiciais (pensão alimentícia / notificação judicial) e os descontos de adiantamento.
+const NUM_EV = '\\d[\\d.]*,\\d\\d';
+const RE_EVENTO = new RegExp('(\\d{1,4})\\s+0([1-4])\\s+([^\\d]*?)\\s+(' + NUM_EV + '(?:\\s+' + NUM_EV + ')?)(?!\\d)', 'g');
+function parseFolha(texto, nomeArquivo){
+  const t = texto.split(/\r?\n/);
+  const porCad = {};
+  let cur = null, cc = '';
+  for (let i = 0; i < t.length; i++){
+    const mcc = /^C\.Custo:\s*(\S+)\s*(.*)$/.exec(t[i]);
+    if (mcc) cc = (mcc[1] + ' ' + mcc[2]).trim();
+    const m = /^Colaborador:\s*-\s*(\d+)\s*-\s*(.*)$/.exec(t[i]);
+    if (m){ cur = parseInt(m[1], 10); if (!porCad[cur]) porCad[cur] = { cad:cur, nome:m[2].trim(), cc, sit:'', liquido:null, judiciais:[], adtos:[], fechado:false }; }
+    const ms = /St:(\S+)/.exec(t[i]);
+    if (ms && cur != null && porCad[cur] && !porCad[cur].sit) porCad[cur].sit = ms[1];
+    if (cur != null && porCad[cur] && !porCad[cur].fechado){
+      if (/^Totais:/.test(t[i])) porCad[cur].fechado = true;
+      else for (const mj of t[i].matchAll(RE_EVENTO)){
+        const desc = mj[3].trim(), tp = mj[2];
+        const nums = mj[4].trim().split(/\s+/), valor = r2(numBR(nums[nums.length - 1]));
+        if (/pens[aã]o/i.test(desc)) porCad[cur].judiciais.push({ tipo:'pensao', cod:mj[1], desc, valor });
+        else if (/notif|judic|jud\./i.test(desc)) porCad[cur].judiciais.push({ tipo:'notif', cod:mj[1], desc, valor });
+        if (tp === '3' && /adiant|adto/i.test(desc)) porCad[cur].adtos.push({ cod:mj[1], desc, valor, ferias:/f[eé]rias/i.test(desc) });
+      }
+    }
+    if (/^Totais:/.test(t[i]) && cur != null && porCad[cur] && porCad[cur].liquido === null){
+      for (let j = i + 1; j < Math.min(i + 12, t.length); j++){
+        const nums = t[j].match(/\d[\d.]*,\d\d/g);
+        if (nums && nums.length === 2 && !/Proc/.test(t[j])){ porCad[cur].liquido = r2(numBR(nums[1])); break; }
+      }
+    }
+  }
+  const lista = Object.values(porCad);
+  if (!lista.length) throw new Error('não achei colaboradores (“Colaborador: - 1 - NOME”). Este é o texto da Relação de Cálculo?');
+  let periodo = null;
+  for (let i = 0; i < Math.min(t.length, 25) && !periodo; i++){
+    const mp = /(\d{2})\/(\d{2})\/(\d{4})\s+a\s+(\d{2})\/(\d{2})\/(\d{4})\s+Tipo:\s*(.*)$/.exec(t[i]);
+    if (mp) periodo = { mes:+mp[2], ano:+mp[3], tipo:mp[7].trim() };
+  }
+  return { arquivo:nomeArquivo, porCad, total:lista.length, periodo };
+}
+
+// ===================== Pareamento por nome =====================
+const PARTICULAS = new Set(['DA', 'DE', 'DO', 'DAS', 'DOS', 'E']);
+const RUIDO_FIM = new Set(['FUNC', 'FUN', 'FUNCIONARIO', 'FUNCIONARIA', 'FUNCIORARIO', 'USAR', 'ESTE', 'LJ', 'LOJA']);
+function tokensNome(s){
+  let x = semAcento(String(s || '')).toUpperCase().replace(/\(.*?\)/g, ' ').replace(/\[.*?\]/g, ' ').replace(/[^A-Z ]/g, ' ');
+  let tk = x.split(/\s+/).filter(Boolean);
+  while (tk.length > 2 && RUIDO_FIM.has(tk[tk.length - 1])) tk.pop();
+  return tk.filter(w => !PARTICULAS.has(w));
+}
+function lev(a, b){
+  if (a === b) return 0;
+  const m = a.length, n = b.length; if (!m) return n; if (!n) return m;
+  let prev = Array.from({ length:n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++){
+    const cur = [i];
+    for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[n];
+}
+const igual = (a, b) => a.length === b.length && a.every((w, i) => w === b[i]);
+function prefixo(a, b){
+  const [c, l] = a.length <= b.length ? [a, b] : [b, a];
+  return c.length >= 3 && c.every((w, i) => l[i] === w);
+}
+function aproximado(a, b){
+  if (a.length !== b.length || a.length < 3) return false;
+  let ruins = 0;
+  for (let i = 0; i < a.length; i++){
+    if (a[i] === b[i]) continue;
+    if (a[i].length >= 5 && b[i].length >= 5 && lev(a[i], b[i]) <= 1) { ruins++; continue; }
+    return false;
+  }
+  return ruins <= 1;
+}
+
+// ===================== Pareamento de pagamentos com pessoas =====================
+const ORDEM_CONF = ['nome', 'nome parcial', 'nome aproximado', 'valor (confirmar)'];
+// Liga cada pagamento a uma pessoa pelo nome. Nome idêntico basta; nome só parecido (abreviado, com
+// sobrenome a mais ou digitado errado) exige também o mesmo valor, ou ser o único candidato ainda sem pagamento.
+function parearNomes(pags, itens, valorDe){
+  const livre = () => pags.filter(p => !p.func);
+  const ligar = (p, f, conf) => { p.func = f; p.confianca = conf; f.pagamentos.push(p); };
+  const melhor = (p, cands) => {
+    if (cands.length === 1) return cands[0];
+    const iguais = cands.filter(f => Math.abs(valorDe(f) - p.valor) < 0.005);
+    if (iguais.length === 1) return iguais[0];
+    return cands.slice().sort((a, b) => Math.abs(valorDe(a) - p.valor) - Math.abs(valorDe(b) - p.valor))[0];
+  };
+  const niveis = [['nome', igual, false], ['nome parcial', prefixo, true], ['nome aproximado', aproximado, true]];
+  for (const [rotulo, teste, exigeValor] of niveis){
+    for (const p of livre()){
+      let cands = itens.filter(f => teste(p.tok, f.tok) && (!exigeValor || Math.abs(valorDe(f) - p.valor) < 0.005));
+      if (!cands.length && rotulo === 'nome parcial'){
+        const so = itens.filter(f => prefixo(p.tok, f.tok));
+        if (so.length === 1 && so[0].pagamentos.length === 0) cands = so;
+      }
+      if (!cands.length) continue;
+      const f = melhor(p, cands);
+      if (f) ligar(p, f, rotulo);
+    }
+  }
+  // último recurso: valor idêntico e único entre pagamentos soltos e pessoas sem pagamento
+  const semPg = () => itens.filter(f => f.pagamentos.length === 0);
+  for (const p of livre()){
+    const c = semPg().filter(f => Math.abs(valorDe(f) - p.valor) < 0.005);
+    const pagsIguais = livre().filter(q => Math.abs(q.valor - p.valor) < 0.005);
+    if (c.length === 1 && pagsIguais.length === 1) ligar(p, c[0], 'valor (confirmar)');
+  }
+}
+const piorConf = pagamentos => pagamentos.length ? pagamentos.map(p => p.confianca).sort((a, b) => ORDEM_CONF.indexOf(b) - ORDEM_CONF.indexOf(a))[0] : '';
+const novosPagamentos = razao => razao.pagamentos.map((p, i) => ({ ...p, seq:i + 1, tok:tokensNome(p.nome), func:null, confianca:'' }));
+
+// ===================== Conciliação da folha (líquido x pagamentos) =====================
+const ROT_DIV = { pensao:'Pensão alimentícia', notif:'Notificação judicial', outros:'Demais (pago a maior)' };
+function conciliar(rel, razao, folha, opts){
+  const tol = opts && opts.tol != null ? opts.tol : 0.05;
+  const fs_ = rel.funcionarios.map(f => ({
+    cad:f.cad, nome:f.nome, situacao:f.situacao, liquido:f.liquido, tok:tokensNome(f.nome),
+    cc:'', folhaLiquido:null, pagamentos:[], confianca:'', judiciais:[], evidencia:'', divisao:[], divisaoTxt:'',
+  }));
+  if (folha){
+    for (const f of fs_){
+      const o = folha.porCad[f.cad];
+      if (o){ f.cc = o.cc; f.folhaLiquido = o.liquido; f.judiciais = o.judiciais || []; if (!f.situacao) f.situacao = o.sit; }
+    }
+  }
+  const pags = novosPagamentos(razao);
+  parearNomes(pags, fs_, f => f.liquido);
+  const semFolha = pags.filter(p => !p.func);
+  for (const p of semFolha){
+    const sug = fs_.find(f => prefixo(p.tok, f.tok) || aproximado(p.tok, f.tok));
+    p.sugestao = sug ? sug.nome + ' (cad. ' + sug.cad + ', líquido ' + fmt(sug.liquido) + ')' : '';
+  }
+  for (const f of fs_){
+    f.pago = r2(f.pagamentos.reduce((s, p) => s + p.valor, 0));
+    f.dif = r2(f.pago - f.liquido);
+    f.pagamentos.forEach(p => { p.judEvento = f.judiciais.find(e => Math.abs(e.valor - p.valor) < 0.005) || null; });
+    const achados = f.pagamentos.filter(p => p.judEvento);
+    if (achados.length) f.evidencia = achados.map(p => 'Pgto ' + p.doc + ' = ' + p.judEvento.desc + ' ' + fmt(p.judEvento.valor)).join('; ');
+    else if (folha && f.judiciais.length) f.evidencia = 'Folha: ' + f.judiciais.map(e => e.desc + ' ' + fmt(e.valor)).join(', ');
+    else if (folha) f.evidencia = 'Sem evento judicial na folha';
+    f.docs = f.pagamentos.map(p => p.doc).join(', ');
+    f.datas = [...new Set(f.pagamentos.map(p => p.data))].join(', ');
+    f.filiais = [...new Set(f.pagamentos.map(p => p.filial).filter(Boolean))].join(', ');
+    if (f.pagamentos.length === 0) f.status = f.liquido > tol ? 'Sem pagamento' : 'Conciliado';
+    else if (Math.abs(f.dif) <= tol) f.status = 'Conciliado';
+    else f.status = f.dif > 0 ? 'Pago a maior' : 'Pago a menor';
+    f.confianca = piorConf(f.pagamentos);
+    // Pago a maior: a parte judicial (proporcional ao excesso) vai para pensão / notificação; o resto, para "demais"
+    if (f.status === 'Pago a maior'){
+      const judTotal = r2(f.judiciais.reduce((s, e) => s + e.valor, 0));
+      const jud = Math.min(f.dif, judTotal);
+      const grupos = {};
+      f.judiciais.forEach(e => { grupos[e.tipo] = (grupos[e.tipo] || 0) + e.valor; });
+      const tipos = Object.keys(grupos);
+      let usado = 0;
+      if (jud > 0.004) tipos.forEach((tp, i) => {
+        const v = i === tipos.length - 1 ? r2(jud - usado) : r2(jud * grupos[tp] / judTotal);
+        usado = r2(usado + v);
+        if (v > 0.004) f.divisao.push({ tipo:tp, valor:v });
+      });
+      const resto = r2(f.dif - (jud > 0.004 ? jud : 0));
+      if (resto > 0.004) f.divisao.push({ tipo:'outros', valor:resto });
+      f.divisaoTxt = f.divisao.map(d => ROT_DIV[d.tipo] + ' ' + fmt(d.valor)).join(' | ');
+    }
+  }
+  const soma = fn => r2(fs_.filter(fn).reduce((s, f) => s + f.dif, 0));
+  const tot = {
+    funcionarios: fs_.length,
+    liquido: r2(fs_.reduce((s, f) => s + f.liquido, 0)),
+    pago: r2(pags.reduce((s, p) => s + p.valor, 0)),
+    pagoMaior: soma(f => f.status === 'Pago a maior'),
+    pagoMenor: soma(f => f.status === 'Pago a menor'),
+    semPagamento: r2(-fs_.filter(f => f.status === 'Sem pagamento').reduce((s, f) => s + f.liquido, 0)),
+    centavos: r2(fs_.filter(f => f.status === 'Conciliado').reduce((s, f) => s + f.dif, 0)),
+    semFolha: r2(semFolha.reduce((s, p) => s + p.valor, 0)),
+    nConc: fs_.filter(f => f.status === 'Conciliado').length,
+    nMaior: fs_.filter(f => f.status === 'Pago a maior').length,
+    nMenor: fs_.filter(f => f.status === 'Pago a menor').length,
+    nSemPg: fs_.filter(f => f.status === 'Sem pagamento').length,
+  };
+  tot.dif = r2(tot.pago - tot.liquido);
+  tot.explicado = r2(tot.pagoMaior + tot.pagoMenor + tot.semPagamento + tot.centavos + tot.semFolha);
+  tot.naoExplicado = r2(tot.dif - tot.explicado);
+  const checks = {
+    saldoIgualLiquido: r2(razao.saldoInicial - tot.liquido),
+    saldoFinalCalc: r2(razao.saldoInicial - razao.totalPagamentos + razao.folNet + razao.outros),
+    saldoFinalDif: r2(razao.saldoFinal - (razao.saldoInicial - razao.totalPagamentos + razao.folNet + razao.outros)),
+    residualAposPagamentos: r2(razao.saldoInicial - razao.totalPagamentos),
+  };
+  const soFolha = folha ? Object.values(folha.porCad).filter(o => !rel.funcionarios.some(f => f.cad === o.cad)) : [];
+  const folhaDifere = folha ? fs_.filter(f => f.folhaLiquido != null && Math.abs(f.folhaLiquido - f.liquido) > 0.005) : [];
+  return { funcionarios:fs_, pagamentos:pags, semFolha, tot, checks, soFolha, folhaDifere, tol };
+}
+
+// ===================== Conciliação do adiantamento salarial (pago x descontado) =====================
+function conciliarAdto(razao, folha, opts){
+  const tol = opts && opts.tol != null ? opts.tol : 0.05;
+  const itens = Object.values(folha.porCad).map(o => {
+    const desc = (o.adtos || []).filter(e => !e.ferias), fer = (o.adtos || []).filter(e => e.ferias);
+    return { cad:o.cad, nome:o.nome, situacao:o.sit, cc:o.cc, tok:tokensNome(o.nome),
+      descAdto:r2(desc.reduce((s, e) => s + e.valor, 0)), adtoFerias:r2(fer.reduce((s, e) => s + e.valor, 0)), pagamentos:[], confianca:'' };
+  });
+  const pags = novosPagamentos(razao);
+  parearNomes(pags, itens, f => f.descAdto);
+  const semFolha = pags.filter(p => !p.func);
+  for (const f of itens){
+    f.pago = r2(f.pagamentos.reduce((s, p) => s + p.valor, 0));
+    f.dif = r2(f.pago - f.descAdto);
+    f.docs = f.pagamentos.map(p => p.doc).join(', ');
+    f.datas = [...new Set(f.pagamentos.map(p => p.data))].join(', ');
+    if (Math.abs(f.dif) <= tol) f.status = 'Conciliado';
+    else if (f.dif > 0) f.status = 'Pago e não descontado';
+    else f.status = f.pago > 0 ? 'Descontado a maior' : 'Descontado sem pagamento';
+    f.confianca = piorConf(f.pagamentos);
+  }
+  const lista = itens.filter(f => f.pago > 0 || f.descAdto > 0);
+  const soma = fn => r2(lista.filter(fn).reduce((s, f) => s + f.dif, 0));
+  const tot = {
+    funcionariosComAdto: lista.length,
+    pago: r2(pags.reduce((s, p) => s + p.valor, 0)),
+    descontado: r2(lista.reduce((s, f) => s + f.descAdto, 0)),
+    naoDescontado: soma(f => f.status === 'Pago e não descontado'),
+    descMaior: soma(f => f.status === 'Descontado a maior' || f.status === 'Descontado sem pagamento'),
+    centavos: soma(f => f.status === 'Conciliado'),
+    semFolha: r2(semFolha.reduce((s, p) => s + p.valor, 0)),
+    nConc: lista.filter(f => f.status === 'Conciliado').length,
+    nNaoDesc: lista.filter(f => f.status === 'Pago e não descontado').length,
+    nDescMaior: lista.filter(f => f.status === 'Descontado a maior' || f.status === 'Descontado sem pagamento').length,
+  };
+  tot.dif = r2(tot.pago - tot.descontado);
+  tot.explicado = r2(tot.naoDescontado + tot.descMaior + tot.centavos + tot.semFolha);
+  tot.naoExplicado = r2(tot.dif - tot.explicado);
+  // conta de ativo: saldo devedor positivo; no razão o débito vem como negativo
+  const saldoInicialDev = r2(-razao.saldoInicial), saldoFinalRazao = r2(-razao.saldoFinal);
+  const saldoFinalCalc = r2(saldoInicialDev + razao.totalPagamentos - razao.folNet - razao.outros);
+  const checks = { saldoInicialDev, saldoFinalRazao, saldoFinalCalc, saldoFinalDif:r2(saldoFinalRazao - saldoFinalCalc), folCredDif:r2(razao.folNet - tot.descontado) };
+  return { funcionarios:lista, pagamentos:pags, semFolha, tot, checks, tol };
+}
+
+// ===================== Lançamentos de ajuste =====================
+const TIPO_COMPL = {
+  pensao:'PENSAO ALIMENTICIA', notif:'NOTIFICACAO JUDICIAL', outros:'PGTO FOLHA A MAIOR', semfolha:'PGTO FOLHA SEM VINCULO',
+  adtomais:'ADTO SALARIAL PAGO A MAIOR', adtocaixa:'ADTO SALARIAL PAGO PELO CAIXA', adtosemfolha:'ADTO SEM COLABORADOR NA FOLHA',
+};
+function complementoDe(cfg, nome, cad, tipo){
+  const mes = cfg.mes ? pad2(cfg.mes) : '', ano = cfg.ano || '';
+  return (cfg.complemento || '').replace(/\{NOME\}/g, () => nome).replace(/\{CAD\}/g, () => cad)
+    .replace(/\{MM\}/g, mes).replace(/\{AAAA\}/g, ano).replace(/\{TIPO\}/g, TIPO_COMPL[tipo]);
+}
+// Folha: o que foi pago a mais sai de Salários a Pagar. A parte judicial (proporcional ao excesso) vai para a conta de
+// pensão ou de notificação; o restante, para a conta dos demais. Pago a menor / sem pagamento só são apontados.
+function montarLancamentos(res, cfg){
+  const contaDe = { pensao:cfg.contaPensao, notif:cfg.contaNotif, outros:cfg.contaMaior, semfolha:cfg.contaSemFolha };
+  const pend = { pensao:'Pago a maior na folha: parte de pensão alimentícia', notif:'Pago a maior na folha: parte de notificação judicial', outros:'Pago a maior na folha' };
+  const ls = [];
+  for (const f of res.funcionarios.filter(x => x.status === 'Pago a maior')){
+    const temJud = f.divisao.some(d => d.tipo !== 'outros');
+    for (const d of f.divisao){
+      ls.push({ chave:'f' + f.cad + d.tipo, origem:'Folha', tipo:ROT_DIV[d.tipo], judicial:d.tipo !== 'outros', nome:f.nome,
+        pend:d.tipo === 'outros' && temJud ? 'Pago a maior na folha: demais (fora o judicial)' : pend[d.tipo],
+        debito:contaDe[d.tipo], credito:cfg.contaSalarios, valor:d.valor, complemento:complementoDe(cfg, f.nome, f.cad, d.tipo), evidencia:f.evidencia, incluir:true });
+    }
+  }
+  for (const p of res.semFolha){
+    ls.push({ chave:'p' + p.seq, origem:'Folha', tipo:'Pagamento sem folha', judicial:false, nome:p.nome, pend:'Pagamento sem funcionário na Relação de Líquidos',
+      debito:contaDe.semfolha, credito:cfg.contaSalarios, valor:r2(p.valor), complemento:complementoDe(cfg, p.nome, '', 'semfolha'),
+      evidencia:p.sugestao ? 'Possível: ' + p.sugestao : '', incluir:true });
+  }
+  return ls;
+}
+// Adiantamento: pago a mais (não descontado) é reclassificado para a despesa; o que faltou pagamento foi pago pelo caixa.
+function montarLancamentosAdto(ad, cfg){
+  const ls = [];
+  for (const f of ad.funcionarios){
+    const ev = 'Pago ' + fmt(f.pago) + ' · descontado ' + fmt(f.descAdto);
+    if (f.status === 'Pago e não descontado'){
+      ls.push({ chave:'a' + f.cad + 'mais', origem:'Adiantamento', tipo:'Pago a mais', judicial:false, nome:f.nome, pend:'Adiantamento pago e não descontado na folha',
+        debito:cfg.contaAdtDesp, credito:cfg.contaAdt, valor:f.dif, complemento:complementoDe(cfg, f.nome, f.cad, 'adtomais'), evidencia:ev, incluir:true });
+    } else if (f.status === 'Descontado a maior' || f.status === 'Descontado sem pagamento'){
+      ls.push({ chave:'a' + f.cad + 'cx', origem:'Adiantamento', tipo:'Pago pelo caixa', judicial:false, nome:f.nome, pend:'Adiantamento descontado e não pago (pago pelo caixa)',
+        debito:cfg.contaAdt, credito:cfg.contaCaixa, valor:r2(-f.dif), complemento:complementoDe(cfg, f.nome, f.cad, 'adtocaixa'), evidencia:ev, incluir:true });
+    }
+  }
+  for (const p of ad.semFolha){
+    ls.push({ chave:'as' + p.seq, origem:'Adiantamento', tipo:'Pago a mais', judicial:false, nome:p.nome, pend:'Adiantamento sem colaborador na folha',
+      debito:cfg.contaAdtDesp, credito:cfg.contaAdt, valor:r2(p.valor), complemento:complementoDe(cfg, p.nome, '', 'adtosemfolha'), evidencia:'', incluir:true });
+  }
+  return ls;
+}
+
+// ===================== Planilha de importação =====================
+function nomeSufixo(razao){
+  const m = razao.meta;
+  return (m.mesFim ? pad2(m.mesFim) : '') + (m.ano || '');
+}
+function gerarWorkbookLancamentos(lancs, cfg){
+  const header = ['CÓDIGO EMPRESA*', 'DATA LANÇAMENTO*', 'CONTA DEBITO', 'CONTA CREDITO', 'CÓDIGO HISTÓRICO PADRÃO', 'COMPLEMENTO', 'VALOR LANÇAMENTO*', 'CENTRO CUSTO DEBITO', 'CENTRO CUSTO CREDITO', 'CÓDIGO AGRUPADOR'];
+  const serial = dataSerial(cfg.dataAno, cfg.dataMes, cfg.dataDia);
+  const rows = lancs.map(l => [cfg.empresa, null, l.debito, l.credito, cfg.historico || null, l.complemento, l.valor, null, null, null]);
+  const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+  for (let i = 0; i < rows.length; i++) ws[XLSX.utils.encode_cell({ r:i + 1, c:1 })] = { t:'n', v:serial, z:'dd/mm/yyyy' };
+  ws['!cols'] = [{ wch:14 }, { wch:14 }, { wch:16 }, { wch:16 }, { wch:12 }, { wch:56 }, { wch:16 }, { wch:14 }, { wch:14 }, { wch:14 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Planilha1');
+  return wb;
+}
+const wbParaBlob = wb => new Blob([XLSX.write(wb, { bookType:'xlsx', type:'array' })], { type:'application/octet-stream' });
+
+// ===================== Interface =====================
+const TOL = 0.05;
+const estado = { rel:null, razSal:null, razAdt:null, folhas:[], erros:[], res:null, adto:null, folhaPag:null, folhaAdt:null, esperadaPag:'', esperadaAdt:'', lancs:[], infos:[], excl:{} };
+const $ = id => document.getElementById(id);
+const CFG_KEY = 'cfolha_cfg_v3';
+const CFG_IDS = { sal:'cfg-sal', pensao:'cfg-pensao', notif:'cfg-notif', maior:'cfg-maior', semfolha:'cfg-semfolha', adt:'cfg-adt', adtdesp:'cfg-adtdesp', caixa:'cfg-caixa', compl:'cfg-compl', hist:'cfg-hist' };
+
+function toast(msg, tipo){
+  const el = document.createElement('div');
+  el.className = 'toast' + (tipo === 'err' ? ' toast-err' : tipo === 'ok' ? ' toast-ok' : '');
+  el.textContent = msg; $('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 5200);
+}
+function lerCfgSalva(){ try{ return JSON.parse(localStorage.getItem(CFG_KEY) || '{}'); }catch(e){ return {}; } }
+function gravarCfg(){ try{ const o = {}; for (const k in CFG_IDS) o[k] = $(CFG_IDS[k]).value; localStorage.setItem(CFG_KEY, JSON.stringify(o)); }catch(e){} }
+function aplicarCfgSalva(){ const c = lerCfgSalva(); for (const k in CFG_IDS) if (c[k]) $(CFG_IDS[k]).value = c[k]; }
+function cfgAtual(){
+  const d = $('cfg-data').value.split('-');
+  const v = id => $(id).value.trim();
+  return {
+    empresa: parseInt($('cfg-emp').value, 10) || 1,
+    dataAno: +d[0] || 0, dataMes: +d[1] || 0, dataDia: +d[2] || 0, ano: d[0] || '', mes: d[1] ? +d[1] : 0,
+    contaSalarios:v('cfg-sal'), contaPensao:v('cfg-pensao'), contaNotif:v('cfg-notif'), contaMaior:v('cfg-maior'), contaSemFolha:v('cfg-semfolha'),
+    contaAdt:v('cfg-adt'), contaAdtDesp:v('cfg-adtdesp'), contaCaixa:v('cfg-caixa'),
+    historico:v('cfg-hist'), complemento:$('cfg-compl').value,
+  };
+}
+const idxMes = (ano, mes) => ano * 12 + mes - 1;
+const rotMes = i => pad2(i % 12 + 1) + '/' + Math.floor(i / 12);
+
+// ----- reconhecimento dos arquivos -----
+function papelDoRazao(raz){
+  const cod = raz.meta.contaCod || '', nome = chaveTxt(raz.meta.contaNome || '');
+  if (cod === '2.1.1.01.0001' || /SALARIOS A PAGAR/.test(nome)) return 'razSal';
+  if (cod === '1.1.3.01.0002' || /ADIANT/.test(nome)) return 'razAdt';
+  throw new Error('conta do razão não reconhecida (' + (cod || 'sem código') + '); esperado 2.1.1.01.0001 ou 1.1.3.01.0002');
+}
+async function classificar(f){
+  const ext = (f.name.split('.').pop() || '').toLowerCase();
+  const buf = await f.arrayBuffer();
+  if (ext === 'xlsx' || ext === 'xls'){ estado.rel = await parseRelacao(buf, f.name); return; }
+  if (ext === 'csv'){
+    const raz = parseRazao(buf, f.name);
+    estado[papelDoRazao(raz)] = raz;
+    if (raz.meta.ano && raz.meta.mesFim){ $('cfg-data').value = raz.meta.ano + '-' + pad2(raz.meta.mesFim) + '-' + pad2(raz.meta.diaFim || 28); $('cfg-emp').value = parseInt(raz.emp, 10) || 1; }
+    return;
+  }
+  if (ext === 'txt'){
+    const fol = parseFolha(decodeBytesToText(buf), f.name);
+    const k = fol.periodo ? fol.periodo.ano * 12 + fol.periodo.mes : f.name;
+    estado.folhas = estado.folhas.filter(x => (x.periodo ? x.periodo.ano * 12 + x.periodo.mes : x.arquivo) !== k);
+    estado.folhas.push(fol);
+    return;
+  }
+  throw new Error('tipo de arquivo não reconhecido (use .xlsx, .csv ou .txt)');
+}
+async function receberArquivos(lista){
+  estado.erros = [];
+  for (const f of lista){
+    try{ await classificar(f); }
+    catch(err){ estado.erros.push(f.name + ': ' + (err && err.message || err)); }
+  }
+  atualizar();
+}
+
+// ----- análise -----
+function analisar(){
+  const avisos = [];
+  const tPag = estado.razSal ? idxMes(estado.razSal.meta.ano, estado.razSal.meta.mesFim) - 1 : null;
+  const tAdt = estado.razAdt ? idxMes(estado.razAdt.meta.ano, estado.razAdt.meta.mesFim) : null;
+  estado.esperadaPag = tPag != null ? rotMes(tPag) : ''; estado.esperadaAdt = tAdt != null ? rotMes(tAdt) : '';
+  let pag = null, adt = null; const sobra = [];
+  for (const f of estado.folhas){
+    const c = f.periodo ? idxMes(f.periodo.ano, f.periodo.mes) : null;
+    if (c != null && c === tPag && !pag) pag = f; else if (c != null && c === tAdt && !adt) adt = f; else sobra.push(f);
+  }
+  for (const f of sobra){
+    const rot = f.periodo ? pad2(f.periodo.mes) + '/' + f.periodo.ano : f.arquivo;
+    if (!pag && estado.razSal){ pag = f; avisos.push('A folha ' + rot + ' não é a esperada (' + estado.esperadaPag + ') para os pagamentos; usei mesmo assim.'); }
+    else if (!adt && estado.razAdt){ adt = f; avisos.push('A folha ' + rot + ' não é a esperada (' + estado.esperadaAdt + ') para o adiantamento; usei mesmo assim.'); }
+    else avisos.push('A folha ' + rot + ' não foi usada.');
+  }
+  estado.folhaPag = pag; estado.folhaAdt = adt;
+  estado.res = estado.rel && estado.razSal ? conciliar(estado.rel, estado.razSal, pag, { tol:TOL }) : null;
+  estado.adto = estado.razAdt && adt ? conciliarAdto(estado.razAdt, adt, { tol:TOL }) : null;
+  const cfg = cfgAtual();
+  const novos = (estado.res ? montarLancamentos(estado.res, cfg) : []).concat(estado.adto ? montarLancamentosAdto(estado.adto, cfg) : []);
+  novos.forEach(l => { if (estado.excl[l.chave]) l.incluir = false; });
+  estado.lancs = novos;
+  // pendências que só são apontadas (sem lançamento)
+  const infos = [];
+  if (estado.res) estado.res.funcionarios.filter(f => f.status === 'Pago a menor' || f.status === 'Sem pagamento').forEach(f =>
+    infos.push({ origem:'Folha', nome:f.nome, pend:f.status === 'Pago a menor' ? 'Pago a menor na folha' : 'Sem pagamento na folha', valor:r2(-f.dif), evidencia:'Líquido ' + fmt(f.liquido) + ' · pago ' + fmt(f.pago) }));
+  estado.infos = infos;
+  estado.avisos = avisos;
+}
+
+// ----- tela -----
+function chipsDocs(){
+  const it = [];
+  if (estado.rel) it.push(['rel', 'Relação de Líquidos', estado.rel.funcionarios.length + ' funcionários · líquido ' + fmt(estado.rel.soma), estado.rel.arquivo]);
+  if (estado.razSal) it.push(['razSal', 'Razão Salários a Pagar', estado.razSal.pagamentos.length + ' pagamentos · ' + rotMes(idxMes(estado.razSal.meta.ano, estado.razSal.meta.mesFim)), estado.razSal.arquivo]);
+  if (estado.razAdt) it.push(['razAdt', 'Razão Adiantamento', estado.razAdt.pagamentos.length + ' pagamentos · ' + rotMes(idxMes(estado.razAdt.meta.ano, estado.razAdt.meta.mesFim)), estado.razAdt.arquivo]);
+  estado.folhas.forEach((f, i) => {
+    const rot = f.periodo ? pad2(f.periodo.mes) + '/' + f.periodo.ano : 'sem período';
+    const uso = f === estado.folhaPag ? 'pagamentos e judicial' : f === estado.folhaAdt ? 'desconto do adiantamento' : 'não usada';
+    it.push(['folha' + i, 'Folha ' + rot, f.total + ' colaboradores · ' + uso, f.arquivo]);
+  });
+  return it;
+}
+function renderDocs(){
+  const it = chipsDocs();
+  $('docs-lista').innerHTML = it.map(x => '<span class="file-chip" title="' + esc(x[3]) + '">✓ <strong>' + esc(x[1]) + '</strong> · ' + esc(x[2]) + ' <button class="btn-icon" data-rm="' + x[0] + '" aria-label="Remover ' + esc(x[1]) + '">×</button></span>').join('')
+    + (it.length ? '<button class="btn-ghost" id="btn-limpar">Limpar tudo</button>' : '');
+  $('docs-lista').querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.rm;
+    if (k.indexOf('folha') === 0) estado.folhas.splice(+k.slice(5), 1); else estado[k] = null;
+    atualizar();
+  }));
+  const bl = $('btn-limpar'); if (bl) bl.addEventListener('click', () => { estado.rel = estado.razSal = estado.razAdt = null; estado.folhas = []; estado.erros = []; estado.excl = {}; atualizar(); });
+  const itens = [
+    [!!estado.rel, 'Relação de Líquidos'],
+    [!!estado.razSal, 'Razão Salários a Pagar'],
+    [!!estado.folhaPag, 'Folha ' + (estado.esperadaPag || 'do pagamento') + ' (judicial, opcional)'],
+    [!!estado.razAdt, 'Razão Adiantamento'],
+    [!!estado.folhaAdt, 'Folha ' + (estado.esperadaAdt || 'do desconto') + ' (adiantamento)'],
+  ];
+  $('docs-check').innerHTML = itens.map(x => '<span class="' + (x[0] ? 'ok' : 'pend') + '">' + (x[0] ? '✓' : '○') + ' ' + esc(x[1]) + '</span>').join('');
+  $('docs-erros').innerHTML = estado.erros.map(e => '<div class="alert err">' + esc(e) + '</div>').join('');
+}
+
+function renderResumo(){
+  const el = $('resumo');
+  if (!estado.res && !estado.adto){
+    let dica = 'Anexe os documentos acima para ver as pendências.';
+    if (estado.razAdt && !estado.folhaAdt) dica = 'Falta a Folha ' + (estado.esperadaAdt || 'do mês') + ' para conciliar o adiantamento.';
+    else if ((estado.rel || estado.razSal) && !(estado.rel && estado.razSal)) dica = 'Falta ' + (estado.rel ? 'o razão de Salários a Pagar' : 'a Relação de Líquidos') + ' para conciliar a folha.';
+    el.innerHTML = '<p class="hint" style="margin:0">' + esc(dica) + '</p>' + estado.avisos.map(a => '<div class="alert warn">' + esc(a) + '</div>').join('');
+    return;
+  }
+  const res = estado.res, ad = estado.adto, cfg = cfgAtual();
+  const linhas = [];
+  if (res){ const t = res.tot; linhas.push('<strong>Folha ' + esc(estado.esperadaPag || '') + '</strong> · ' + t.funcionarios + ' funcionários · líquido ' + fmt(t.liquido) + ' · pago ' + fmt(t.pago) + ' · <strong>' + t.nConc + ' conciliados</strong>'); }
+  if (ad){ const t = ad.tot; linhas.push('<strong>Adiantamento ' + esc(estado.esperadaAdt || '') + '</strong> · ' + t.funcionariosComAdto + ' colaboradores · pago ' + fmt(t.pago) + ' · descontado ' + fmt(t.descontado) + ' · <strong>' + t.nConc + ' conciliados</strong>'); }
+  // alertas só quando algo não fecha
+  const al = [];
+  if (res){
+    const c = res.checks, t = res.tot, rz = estado.razSal;
+    if (Math.abs(c.saldoIgualLiquido) > 0.02) al.push(['warn', 'O saldo inicial do razão de Salários (' + fmt(rz.saldoInicial) + ') difere do líquido da folha (' + fmt(t.liquido) + ') em ' + fmt(c.saldoIgualLiquido) + '. Confira se a Relação de Líquidos e o razão são do mesmo mês.']);
+    if (Math.abs(c.saldoFinalDif) > 0.02) al.push(['warn', 'Saldo final do razão de Salários não bate com o recalculado (diferença ' + fmt(c.saldoFinalDif) + ').']);
+    if (Math.abs(t.naoExplicado) > 0.02) al.push(['err', 'Diferença de ' + fmt(t.naoExplicado) + ' na folha sem explicação: pode haver pagamento ligado ao funcionário errado.']);
+    if (res.folhaDifere.length) al.push(['warn', 'Líquido da Folha difere da Relação de Líquidos em ' + res.folhaDifere.length + ' funcionário(s): ' + res.folhaDifere.slice(0, 5).map(f => esc(f.nome)).join(', ') + '.']);
+    if (!estado.folhaPag && t.nMaior) al.push(['warn', 'Sem a Folha ' + (estado.esperadaPag || 'do pagamento') + ' não separo o valor judicial: todo o pago a maior foi para a conta dos demais.']);
+  }
+  if (estado.razAdt && !estado.folhaAdt) al.push(['warn', 'Falta a Folha ' + (estado.esperadaAdt || 'do mês') + ' para conciliar o adiantamento.']);
+  if (ad){
+    const c = ad.checks, rz = estado.razAdt;
+    if (Math.abs(rz.saldoInicial) > 0.02) al.push(['warn', 'A conta de adiantamento começou o mês com saldo de ' + fmt(Math.abs(rz.saldoInicial)) + '; descontos de adiantamentos antigos aparecem como “faltou pagamento”.']);
+    if (Math.abs(c.folCredDif) > 0.02) al.push(['warn', 'O desconto lançado pela folha no razão (' + fmt(rz.folNet) + ') difere dos descontos de adiantamento da folha (' + fmt(ad.tot.descontado) + ') em ' + fmt(c.folCredDif) + '. Confira se a folha é do mesmo mês do razão.']);
+    if (Math.abs(c.saldoFinalDif) > 0.02) al.push(['warn', 'Saldo final do razão de adiantamento não bate com o recalculado (diferença ' + fmt(c.saldoFinalDif) + ').']);
+    if (Math.abs(ad.tot.naoExplicado) > 0.02) al.push(['err', 'Diferença de ' + fmt(ad.tot.naoExplicado) + ' no adiantamento sem explicação.']);
+  }
+  estado.avisos.forEach(a => al.push(['warn', a]));
+  const pares = [];
+  [[res, 'Folha'], [ad, 'Adiantamento']].forEach(([m, o]) => { if (m) m.pagamentos.filter(p => p.func && /valor/.test(p.confianca)).forEach(p => pares.push(o + ': “' + p.nome + '” no razão foi ligado a ' + p.func.nome + ' só pelo valor ' + fmt(p.valor))); });
+  pares.forEach(x => al.push(['warn', 'Confirmar: ' + x + '.']));
+  const marcados = estado.lancs.filter(l => l.incluir);
+  const nPend = estado.lancs.length + estado.infos.length;
+  const linhasTab = estado.lancs.map((l, i) =>
+    '<tr><td><input type="checkbox" data-i="' + i + '"' + (l.incluir ? ' checked' : '') + ' aria-label="Incluir lançamento"></td><td><span class="tag ' + (l.origem === 'Folha' ? 'tag-credito' : 'tag-debito') + '">' + l.origem + '</span></td><td>' + esc(l.nome) + '</td>' +
+    '<td class="wrap">' + esc(l.pend) + (l.evidencia ? '<div class="sub">' + esc(l.evidencia) + '</div>' : '') + '</td>' +
+    '<td class="mono">D ' + esc(l.debito || '—') + '<br>C ' + esc(l.credito) + '</td><td class="num mono">' + fmt(l.valor) + '</td></tr>')
+    .concat(estado.infos.map(x => '<tr class="info"><td></td><td><span class="tag tag-credito">' + x.origem + '</span></td><td>' + esc(x.nome) + '</td><td class="wrap">' + esc(x.pend) + '<div class="sub">' + esc(x.evidencia) + '</div></td><td><span class="tag tag-aviso">só apontado</span></td><td class="num mono">' + fmt(x.valor) + '</td></tr>')).join('');
+  const aprox = [];
+  [[res, 'Folha'], [ad, 'Adiantamento']].forEach(([m, o]) => { if (m) m.pagamentos.filter(p => p.func && /parcial|aproximado/.test(p.confianca)).forEach(p => aprox.push(esc(o) + ': ' + esc(p.nome) + ' → ' + esc(p.func.nome) + ' (' + fmt(p.valor) + ')')); });
+  el.innerHTML =
+    '<div class="resumo-linhas">' + linhas.map(l => '<div>' + l + '</div>').join('') + '</div>' +
+    '<div class="summary-grid">' +
+      '<div class="summary-tile ' + (nPend ? 'warn' : 'accent') + '"><div class="n">' + nPend + '</div><div class="l">Pendências</div></div>' +
+      '<div class="summary-tile accent"><div class="n">' + marcados.length + '</div><div class="l">Lançamentos a importar</div></div>' +
+      '<div class="summary-tile accent"><div class="n">' + fmt(r2(marcados.reduce((s, l) => s + l.valor, 0))) + '</div><div class="l">Valor a lançar</div></div>' +
+      '<div class="summary-tile ' + (pares.length ? 'warn' : 'accent') + '"><div class="n">' + pares.length + '</div><div class="l">A confirmar</div></div>' +
+    '</div>' +
+    al.map(a => '<div class="alert ' + a[0] + '">' + (a[0] === 'err' ? '<strong>' + esc(a[1]) + '</strong>' : esc(a[1])) + '</div>').join('') +
+    (nPend ? '<div class="table-wrap"><table><thead><tr><th></th><th>Origem</th><th>Pessoa</th><th>Pendência</th><th>Lançamento</th><th class="num">Valor</th></tr></thead><tbody>' + linhasTab + '</tbody></table></div>'
+           : '<div class="empty-state"><div class="big">✔</div>Nada pendente: tudo conciliado.</div>') +
+    (aprox.length ? '<details class="cfg" style="margin-top:14px"><summary>Pareamentos por nome parcial ou aproximado (' + aprox.length + ')</summary><ul class="lista-simples">' + aprox.map(x => '<li>' + x + '</li>').join('') + '</ul></details>' : '');
+  el.querySelectorAll('input[data-i]').forEach(cb => cb.addEventListener('change', () => {
+    const l = estado.lancs[+cb.dataset.i]; l.incluir = cb.checked; estado.excl[l.chave] = !cb.checked; renderResumo(); renderFinal();
+  }));
+}
+function renderFinal(){
+  const cfg = cfgAtual();
+  const marcados = estado.lancs.filter(l => l.incluir);
+  const faltaConta = marcados.some(l => !l.debito || !l.credito);
+  const faltaGeral = !cfg.dataAno;
+  $('btn-lanc').disabled = !marcados.length || faltaConta || faltaGeral;
+  let hint = '';
+  if (!estado.res && !estado.adto) hint = '';
+  else if (!estado.lancs.length) hint = 'Nenhum lançamento a gerar.';
+  else if (faltaGeral) hint = 'Informe a data dos lançamentos (em “Contas, data e empresa”).';
+  else if (faltaConta) hint = 'Há lançamento sem conta; confira “Contas, data e empresa”.';
+  else if (!marcados.length) hint = 'Marque ao menos um lançamento.';
+  $('hint-final').textContent = hint;
+}
+function atualizar(){ analisar(); renderDocs(); renderResumo(); renderFinal(); }
+function reanalisar(){ gravarCfg(); atualizar(); }
+
+async function baixar(){
+  const cfg = cfgAtual();
+  const marcados = estado.lancs.filter(l => l.incluir);
+  if (!marcados.length) return;
+  const base = estado.razSal || estado.razAdt;
+  const nome = 'Lancamentos Ajuste Folha ' + nomeSufixo(base) + '.xlsx';
+  if (await salvarArquivo(nome, wbParaBlob(gerarWorkbookLancamentos(marcados, cfg)))) toast('Planilha gerada: ' + nome, 'ok');
+}
+
+const dz = $('dz'), inp = $('in-docs');
+dz.addEventListener('click', () => inp.click());
+dz.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); inp.click(); } });
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('is-dragover'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('is-dragover'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('is-dragover'); if (e.dataTransfer.files.length) receberArquivos([...e.dataTransfer.files]); });
+inp.addEventListener('change', () => { if (inp.files.length) receberArquivos([...inp.files]); inp.value = ''; });
+['cfg-emp', 'cfg-data', 'cfg-sal', 'cfg-pensao', 'cfg-notif', 'cfg-maior', 'cfg-semfolha', 'cfg-adt', 'cfg-adtdesp', 'cfg-caixa', 'cfg-compl', 'cfg-hist'].forEach(id => $(id).addEventListener('input', reanalisar));
+$('btn-lanc').addEventListener('click', baixar);
+aplicarCfgSalva();
+atualizar();
+
+window.__cfp = { parseRelacao, parseRazao, parseFolha, conciliar, conciliarAdto, montarLancamentos, montarLancamentosAdto, gerarWorkbookLancamentos, tokensNome };
+</script>
+</body>
+</html>
