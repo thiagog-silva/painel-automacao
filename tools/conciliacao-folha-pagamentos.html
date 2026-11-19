@@ -538,6 +538,7 @@ function parseRazao(buf, nomeArquivo){
 const NUM_EV = '\\d[\\d.]*,\\d\\d';
 const RE_EVENTO = new RegExp('(\\d{1,4})\\s+0([1-4])\\s+([^\\d]*?)\\s+(' + NUM_EV + '(?:\\s+' + NUM_EV + ')?)(?!\\d)', 'g');
 function parseFolha(texto, nomeArquivo){
+  texto = texto.replace(/([^\n])[ \t]+(Colaborador:\s*-\s*\d+\s*-)/g, '$1\n$2').replace(/([^\n])[ \t]+(C\.Custo:\s*\S)/g, '$1\n$2');
   const t = texto.split(/\r?\n/);
   const porCad = {};
   let cur = null, cc = '';
@@ -545,7 +546,7 @@ function parseFolha(texto, nomeArquivo){
     const mcc = /^C\.Custo:\s*(\S+)\s*(.*)$/.exec(t[i]);
     if (mcc) cc = (mcc[1] + ' ' + mcc[2]).trim();
     const m = /^Colaborador:\s*-\s*(\d+)\s*-\s*(.*)$/.exec(t[i]);
-    if (m){ cur = parseInt(m[1], 10); if (!porCad[cur]) porCad[cur] = { cad:cur, nome:m[2].trim(), cc, sit:'', liquido:null, judiciais:[], adtos:[], fechado:false }; }
+    if (m){ cur = parseInt(m[1], 10); if (!porCad[cur]) porCad[cur] = { cad:cur, nome:m[2].replace(/\s*(Sal[aá]rio Base|Cargo:|Admiss[aã]o:|F\. ?Reg|Cod\. Tp).*$/, '').trim(), cc, sit:'', liquido:null, judiciais:[], adtos:[], fechado:false }; }
     const ms = /St:(\S+)/.exec(t[i]);
     if (ms && cur != null && porCad[cur] && !porCad[cur].sit) porCad[cur].sit = ms[1];
     if (cur != null && porCad[cur] && !porCad[cur].fechado){
@@ -907,29 +908,47 @@ async function pdfParaTexto(buf){
     lib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
   }catch(_){ lib.GlobalWorkerOptions.workerSrc = PDFJS_BASE + 'pdf.worker.min.js'; }
   const pdf = await lib.getDocument({ data: new Uint8Array(buf) }).promise;
-  const linhasTodas = [];
+  const porOrdem = [], porLinha = [];
+  const juntar = (itens) => {            // junta itens de uma mesma linha; espaço quando há vão
+    let txt = '', fim = null;
+    for (const it of itens){
+      if (fim !== null && it.x - fim > 1.2 && !/\s$/.test(txt)) txt += ' ';
+      txt += it.s; fim = it.x + it.w;
+    }
+    return txt.replace(/\s+/g, ' ').trim();
+  };
   for (let p = 1; p <= pdf.numPages; p++){
     const pag = await pdf.getPage(p);
     const tc = await pag.getTextContent();
     const itens = tc.items.filter(it => it.str !== undefined && String(it.str).trim() !== '')
-      .map(it => ({ s:it.str, x:it.transform[4], y:it.transform[5], w:it.width || 0 }));
-    itens.sort((a, b) => b.y - a.y || a.x - b.x);
-    const linhas = [];
+      .map(it => ({ s:it.str, x:it.transform[4], y:it.transform[5], w:it.width || 0, eol:!!it.hasEOL }));
+    // (A) ordem original do arquivo: quebra de linha quando o sistema marca fim de linha ou o y muda
+    let atual = [], yAnt = null;
+    const fechar = () => { if (atual.length){ porOrdem.push(juntar(atual)); atual = []; } };
     for (const it of itens){
+      if (yAnt !== null && Math.abs(it.y - yAnt) > 2.5) fechar();
+      atual.push(it); yAnt = it.y;
+      if (it.eol){ fechar(); yAnt = null; }
+    }
+    fechar();
+    // (B) linhas visuais: agrupa por posição vertical, da esquerda para a direita
+    const ord = itens.slice().sort((a, b) => b.y - a.y || a.x - b.x);
+    const linhas = [];
+    for (const it of ord){
       const L = linhas[linhas.length - 1];
       if (L && Math.abs(L.y - it.y) <= 2.5) L.it.push(it); else linhas.push({ y:it.y, it:[it] });
     }
-    for (const L of linhas){
-      L.it.sort((a, b) => a.x - b.x);
-      let txt = '', fim = null;
-      for (const it of L.it){
-        if (fim !== null && it.x - fim > 1.2 && !/\s$/.test(txt)) txt += ' ';
-        txt += it.s; fim = it.x + it.w;
-      }
-      linhasTodas.push(txt.replace(/\s+/g, ' ').trim());
-    }
+    for (const L of linhas){ L.it.sort((a, b) => a.x - b.x); porLinha.push(juntar(L.it)); }
   }
-  return linhasTodas.join('\n');
+  // usa a ordem que o leitor da folha consegue entender melhor
+  const cand = [porOrdem.join('\n'), porLinha.join('\n')];
+  let melhor = cand[0], pontos = -1;
+  for (const c of cand){
+    let pt = 0;
+    try{ const f = parseFolha(c, 'pdf'); pt = f.total * 1000 + Object.values(f.porCad).reduce((a, x) => a + (x.liquido !== null ? 1 : 0), 0); }catch(_){}
+    if (pt > pontos){ pontos = pt; melhor = c; }
+  }
+  return melhor;
 }
 async function classificar(f){
   const ext = (f.name.split('.').pop() || '').toLowerCase();
