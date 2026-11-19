@@ -545,7 +545,7 @@ function parseFolha(texto, nomeArquivo){
   for (let i = 0; i < t.length; i++){
     const mcc = /^C\.Custo:\s*(\S+)\s*(.*)$/.exec(t[i]);
     if (mcc) cc = (mcc[1] + ' ' + mcc[2]).trim();
-    const m = /^Colaborador:\s*-\s*(\d+)\s*-\s*(.*)$/.exec(t[i]);
+    const m = /(?:^|[\s-])Colaborador:\s*(?:\d+\s*)?-\s*(\d+)\s*-\s*(\S.*)$/.exec(t[i]);
     if (m){ cur = parseInt(m[1], 10); if (!porCad[cur]) porCad[cur] = { cad:cur, nome:m[2].replace(/\s*(Sal[aá]rio Base|Cargo:|Admiss[aã]o:|F\. ?Reg|Cod\. Tp).*$/, '').trim(), cc, sit:'', liquido:null, judiciais:[], adtos:[], fechado:false }; }
     const ms = /St:(\S+)/.exec(t[i]);
     if (ms && cur != null && porCad[cur] && !porCad[cur].sit) porCad[cur].sit = ms[1];
@@ -558,6 +558,10 @@ function parseFolha(texto, nomeArquivo){
         else if (/notif|judic|jud\./i.test(desc)) porCad[cur].judiciais.push({ tipo:'notif', cod:mj[1], desc, valor });
         if (tp === '3' && /adiant|adto/i.test(desc)) porCad[cur].adtos.push({ cod:mj[1], desc, valor, ferias:/f[eé]rias/i.test(desc) });
       }
+    }
+    if (/^Totais:/.test(t[i]) && cur != null && porCad[cur] && porCad[cur].liquido === null){
+      const ml = /L[ií]quido:\s*(\d[\d.]*,\d\d)/.exec(t[i]);      // PDF: tudo na mesma linha
+      if (ml) porCad[cur].liquido = r2(numBR(ml[1]));
     }
     if (/^Totais:/.test(t[i]) && cur != null && porCad[cur] && porCad[cur].liquido === null){
       for (let j = i + 1; j < Math.min(i + 12, t.length); j++){
@@ -848,7 +852,7 @@ const wbParaBlob = wb => new Blob([XLSX.write(wb, { bookType:'xlsx', type:'array
 
 // ===================== Interface =====================
 const TOL = 0.05;
-const estado = { rel:null, razSal:null, razAdt:null, folhas:[], erros:[], res:null, adto:null, folhaPag:null, folhaAdt:null, esperadaPag:'', esperadaAdt:'', lancs:[], infos:[], excl:{} };
+const estado = { diagPdf:null, rel:null, razSal:null, razAdt:null, folhas:[], erros:[], res:null, adto:null, folhaPag:null, folhaAdt:null, esperadaPag:'', esperadaAdt:'', lancs:[], infos:[], excl:{} };
 const $ = id => document.getElementById(id);
 const CFG_KEY = 'cfolha_cfg_v3';
 const CFG_IDS = { sal:'cfg-sal', pensao:'cfg-pensao', notif:'cfg-notif', maior:'cfg-maior', semfolha:'cfg-semfolha', adt:'cfg-adt', adtdesp:'cfg-adtdesp', caixa:'cfg-caixa', compl:'cfg-compl', hist:'cfg-hist' };
@@ -908,7 +912,7 @@ async function pdfParaTexto(buf){
     lib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
   }catch(_){ lib.GlobalWorkerOptions.workerSrc = PDFJS_BASE + 'pdf.worker.min.js'; }
   const pdf = await lib.getDocument({ data: new Uint8Array(buf) }).promise;
-  const porOrdem = [], porLinha = [];
+  const porOrdem = [], porLinha = [], amostra = [];
   const juntar = (itens) => {            // junta itens de uma mesma linha; espaço quando há vão
     let txt = '', fim = null;
     for (const it of itens){
@@ -922,6 +926,7 @@ async function pdfParaTexto(buf){
     const tc = await pag.getTextContent();
     const itens = tc.items.filter(it => it.str !== undefined && String(it.str).trim() !== '')
       .map(it => ({ s:it.str, x:it.transform[4], y:it.transform[5], w:it.width || 0, eol:!!it.hasEOL }));
+    if (p === 1) for (const it of itens.slice(0, 260)) amostra.push('x=' + it.x.toFixed(1) + ' y=' + it.y.toFixed(1) + ' w=' + it.w.toFixed(1) + (it.eol ? ' EOL' : '') + ' | ' + JSON.stringify(it.s));
     // (A) ordem original do arquivo: quebra de linha quando o sistema marca fim de linha ou o y muda
     let atual = [], yAnt = null;
     const fechar = () => { if (atual.length){ porOrdem.push(juntar(atual)); atual = []; } };
@@ -942,11 +947,12 @@ async function pdfParaTexto(buf){
   }
   // usa a ordem que o leitor da folha consegue entender melhor
   const cand = [porOrdem.join('\n'), porLinha.join('\n')];
+  window.__pdfDiag = { ordem:cand[0], linha:cand[1], amostra:amostra.join('\n') };
   let melhor = cand[0], pontos = -1;
   for (const c of cand){
     let pt = 0;
-    try{ const f = parseFolha(c, 'pdf'); pt = f.total * 1000 + Object.values(f.porCad).reduce((a, x) => a + (x.liquido !== null ? 1 : 0), 0); }catch(_){}
-    if (pt > pontos){ pontos = pt; melhor = c; }
+    try{ const f = parseFolha(c, 'pdf'); pt = f.total * 1000 + Object.values(f.porCad).reduce((a, x) => a + (x.liquido !== null ? 1 : 0) + (/^[^\d\s]+$/.test(x.sit || '') ? 10 : 0), 0); }catch(_){}
+    if (pt >= pontos){ pontos = pt; melhor = c; }
   }
   return melhor;
 }
@@ -962,8 +968,13 @@ async function classificar(f){
   }
   if (ext === 'txt' || ext === 'pdf'){
     const texto = ext === 'pdf' ? await pdfParaTexto(buf) : decodeBytesToText(buf);
-    const fol = parseFolha(texto, f.name);
-    if (ext === 'pdf' && !fol.total) throw new Error('não encontrei colaboradores no PDF (é a Relação de Cálculo da folha? se for imagem escaneada, não dá para ler)');
+    let fol;
+    try{ fol = parseFolha(texto, f.name); }
+    catch(err){ if (ext === 'pdf') estado.diagPdf = { nome:f.name, texto:texto }; throw err; }
+    if (ext === 'pdf'){
+      const ruins = Object.values(fol.porCad).filter(x => x.liquido === null || !/^[^\d\s]+$/.test(x.sit || '')).length;
+      if (ruins > fol.total * 0.1){ estado.diagPdf = { nome:f.name, texto:texto }; throw new Error('li o PDF, mas o texto veio fora de ordem e não consegui montar com segurança os dados de ' + ruins + ' de ' + fol.total + ' colaboradores'); }
+    }
     const k = fol.periodo ? fol.periodo.ano * 12 + fol.periodo.mes : f.name;
     estado.folhas = estado.folhas.filter(x => (x.periodo ? x.periodo.ano * 12 + x.periodo.mes : x.arquivo) !== k);
     estado.folhas.push(fol);
@@ -972,7 +983,7 @@ async function classificar(f){
   throw new Error('tipo de arquivo não reconhecido (use .xlsx, .csv, .pdf ou .txt)');
 }
 async function receberArquivos(lista){
-  estado.erros = [];
+  estado.erros = []; estado.diagPdf = null;
   for (const f of lista){
     try{ await classificar(f); }
     catch(err){ estado.erros.push(f.name + ': ' + (err && err.message || err)); }
@@ -1044,6 +1055,11 @@ function renderDocs(){
   ];
   $('docs-check').innerHTML = itens.map(x => '<span class="' + (x[0] ? 'ok' : 'pend') + '">' + (x[0] ? '✓' : '○') + ' ' + esc(x[1]) + '</span>').join('');
   $('docs-erros').innerHTML = estado.erros.map(e => '<div class="alert err">' + esc(e) + '</div>').join('');
+  if (estado.diagPdf){
+    const d = estado.diagPdf, n = (d.texto || '').trim().length;
+    $('docs-erros').insertAdjacentHTML('beforeend', '<div class="alert err">Texto lido de ' + esc(d.nome) + ': ' + (n ? n.toLocaleString('pt-BR') + ' caracteres' : 'nenhum texto (PDF provavelmente é imagem)') + '. <button class="btn-ghost" id="btn-diag" type="button">Baixar texto lido</button></div>');
+    $('btn-diag').addEventListener('click', async () => { await salvarArquivo(d.nome.replace(/\.pdf$/i, '') + ' (texto lido).txt', new Blob([(window.__pdfDiag ? '#### ITENS DA PAGINA 1 (x,y,texto)\n' + window.__pdfDiag.amostra + '\n\n#### LINHAS VISUAIS (ordenadas por x)\n' + window.__pdfDiag.linha.split('\n').slice(0, 400).join('\n') + '\n\n#### ORDEM DO ARQUIVO\n' : '') + (d.texto || '')], { type:'text/plain;charset=utf-8' })); });
+  }
 }
 
 function renderResumo(){
