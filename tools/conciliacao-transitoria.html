@@ -1,0 +1,1098 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="hub-nome" content="Conciliador de Transitória entre Bancos">
+<meta name="hub-descricao" content="Concilia o razão contábil dia a dia por empresa e contrapartida, aponta os grupos que não fecham e gera os lançamentos de ajuste.">
+<meta name="hub-icone" content="⚖️">
+<meta name="hub-categoria" content="Conciliação">
+</head>
+<body>
+<title>Zerador de Transitória</title>
+<style>
+/* ===================================================================
+   TOKENS DE DESIGN
+   =================================================================== */
+:root{
+  --bg:#f5f7f5;
+  --surface:#ffffff;
+  --surface-alt:#eef2ef;
+  --ink:#182420;
+  --muted:#5c6f68;
+  --border:#dbe3de;
+  --accent:#0f5d52;
+  --accent-strong:#0b453d;
+  --accent-ink:#f4fbf9;
+  --accent-soft:#e0efec;
+  --danger:#b3261e;
+  --danger-soft:#fbe9e6;
+  --warning:#8a5a00;
+  --warning-soft:#fff1d9;
+  --success:#1e7d4a;
+  --success-soft:#e5f4ea;
+  --tag-debito-bg:#fff1d9;
+  --tag-debito-ink:#8a5a00;
+  --tag-credito-bg:#e3edfb;
+  --tag-credito-ink:#1b4f8a;
+  --shadow: 0 1px 2px rgba(15,30,25,.06), 0 8px 24px -12px rgba(15,30,25,.22);
+  --radius:14px;
+  --font-display:'IBM Plex Sans Condensed', 'IBM Plex Sans', sans-serif;
+  --font-body:'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono:'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9;
+    --muted:#94a6a0; --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6;
+    --accent-ink:#08201b; --accent-soft:#1a332d; --danger:#ff9d93; --danger-soft:#3a201d;
+    --warning:#ffcf70; --warning-soft:#3a2c12; --success:#8fe3ac; --success-soft:#173425;
+    --tag-debito-bg:#3a2c12; --tag-debito-ink:#ffcf70; --tag-credito-bg:#182b3d; --tag-credito-ink:#8fc2ff;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9;
+  --muted:#94a6a0; --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6;
+  --accent-ink:#08201b; --accent-soft:#1a332d; --danger:#ff9d93; --danger-soft:#3a201d;
+  --warning:#ffcf70; --warning-soft:#3a2c12; --success:#8fe3ac; --success-soft:#173425;
+  --tag-debito-bg:#3a2c12; --tag-debito-ink:#ffcf70; --tag-credito-bg:#182b3d; --tag-credito-ink:#8fc2ff;
+  --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+}
+
+*{ box-sizing:border-box; }
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--font-body);
+  margin:0; padding-inline:16px; padding-block:20px 60px;
+}
+h1,h2,h3{ font-family:var(--font-display); font-weight:700; text-wrap:balance; margin:0; }
+.mono{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+.app-shell{ max-width:1180px; margin:0 auto; }
+
+/* cabeçalho */
+.topbar{
+  position:sticky; top:env(safe-area-inset-top,0px); z-index:30;
+  background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--border); margin:-20px -16px 28px; padding:16px;
+}
+.topbar-inner{ max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:14px 24px; justify-content:space-between; }
+.brand{ display:flex; align-items:center; gap:12px; }
+.brand-mark{
+  width:38px; height:38px; border-radius:10px; background:var(--accent); color:var(--accent-ink);
+  display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-weight:700; font-size:15px;
+  box-shadow:var(--shadow); flex:none;
+}
+.brand h1{ font-size:19px; letter-spacing:.2px; }
+.brand p{ margin:2px 0 0; font-size:12.5px; color:var(--muted); }
+.steps-pills{ display:flex; gap:8px; flex-wrap:wrap; }
+.step-pill{
+  font-family:var(--font-mono); font-size:11.5px; letter-spacing:.03em; padding:6px 11px; border-radius:999px;
+  border:1px solid var(--border); color:var(--muted); background:var(--surface); white-space:nowrap;
+}
+.step-pill.is-active{ border-color:var(--accent); color:var(--accent-strong); background:var(--accent-soft); font-weight:600; }
+.step-pill.is-done{ color:var(--success); border-color:var(--success); }
+
+/* cartões de etapa */
+.step-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:26px; margin-bottom:22px; box-shadow:var(--shadow);
+}
+.step-card[data-locked="true"]{ opacity:.45; pointer-events:none; }
+.step-head{ display:flex; align-items:flex-start; gap:14px; margin-bottom:18px; }
+.step-num{
+  width:32px; height:32px; border-radius:9px; background:var(--surface-alt); color:var(--ink);
+  font-family:var(--font-mono); font-weight:600; font-size:14px; display:flex; align-items:center; justify-content:center; flex:none;
+  border:1px solid var(--border);
+}
+.step-head h2{ font-size:20px; }
+.step-head .step-sub{ margin:3px 0 0; color:var(--muted); font-size:13.5px; max-width:64ch; }
+
+/* upload */
+.dropzone{
+  border:1.5px dashed var(--border); border-radius:12px; padding:30px 20px; text-align:center;
+  background:var(--surface-alt); cursor:pointer; transition:border-color .15s, background .15s;
+}
+.dropzone:hover, .dropzone.is-dragover{ border-color:var(--accent); background:var(--accent-soft); }
+.dropzone strong{ display:block; font-size:15px; margin-bottom:4px; }
+.dropzone span{ font-size:12.5px; color:var(--muted); }
+.file-chip{
+  display:inline-flex; align-items:center; gap:8px; margin-top:14px; padding:7px 12px; border-radius:9px;
+  background:var(--accent-soft); color:var(--accent-strong); font-size:13px; font-family:var(--font-mono);
+}
+.field-row{ display:flex; flex-wrap:wrap; gap:16px; margin-top:16px; }
+.field{ display:flex; flex-direction:column; gap:5px; min-width:190px; flex:1; }
+.field label{ font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.02em; text-transform:uppercase; }
+select, input[type="text"], input[type="number"]{
+  font-family:var(--font-body); font-size:13.5px; padding:9px 10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--surface); color:var(--ink); width:100%;
+}
+select:focus, input:focus, button:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+
+/* prévia bruta / tabela geral */
+.table-wrap{ overflow-x:auto; border:1px solid var(--border); border-radius:10px; margin-top:14px; }
+table{ border-collapse:collapse; width:100%; font-size:13px; }
+thead th{
+  position:sticky; top:0; background:var(--surface-alt); text-align:left; padding:9px 10px; font-size:11.5px;
+  text-transform:uppercase; letter-spacing:.04em; color:var(--muted); border-bottom:1px solid var(--border); white-space:nowrap;
+}
+tbody td{ padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+tbody tr:last-child td{ border-bottom:none; }
+.raw-row{ cursor:pointer; }
+.raw-row:hover td{ background:var(--accent-soft); }
+.raw-row.is-header td{ background:var(--accent); color:var(--accent-ink); font-weight:600; }
+.raw-row .idx{ color:var(--muted); font-family:var(--font-mono); font-size:11.5px; }
+
+/* botões */
+button{ font-family:var(--font-body); cursor:pointer; border:none; border-radius:9px; font-weight:600; font-size:13.5px; }
+.btn-primary{ background:var(--accent); color:var(--accent-ink); padding:11px 20px; box-shadow:var(--shadow); }
+.btn-primary:disabled{ opacity:.45; cursor:not-allowed; box-shadow:none; }
+.btn-secondary{ background:var(--surface-alt); color:var(--ink); border:1px solid var(--border); padding:10px 16px; }
+.btn-ghost{ background:transparent; color:var(--muted); border:1px solid var(--border); padding:7px 10px; font-size:12px; }
+.btn-icon{ background:var(--surface-alt); border:1px solid var(--border); color:var(--ink); width:28px; height:28px; border-radius:7px; display:inline-flex; align-items:center; justify-content:center; padding:0; }
+.actions-row{ display:flex; flex-wrap:wrap; gap:12px; margin-top:18px; align-items:center; }
+.hint{ font-size:12.5px; color:var(--muted); }
+.hint.warn{ color:var(--warning); }
+.hint.err{ color:var(--danger); }
+
+/* cartões-resumo */
+.summary-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:18px; }
+.summary-tile{ background:var(--surface-alt); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+.summary-tile .n{ font-family:var(--font-mono); font-size:22px; font-weight:600; }
+.summary-tile .l{ font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin-top:2px; }
+.summary-tile.accent{ background:var(--accent-soft); }
+.summary-tile.accent .n{ color:var(--accent-strong); }
+.summary-tile.warn .n{ color:var(--warning); }
+
+/* pills de natureza */
+.tag{ display:inline-flex; align-items:center; gap:5px; font-family:var(--font-mono); font-size:11.5px; font-weight:600; padding:4px 9px; border-radius:999px; white-space:nowrap; }
+.tag-debito{ background:var(--tag-debito-bg); color:var(--tag-debito-ink); }
+.tag-credito{ background:var(--tag-credito-bg); color:var(--tag-credito-ink); }
+.valor-pos{ color:var(--tag-debito-ink); }
+.valor-neg{ color:var(--tag-credito-ink); }
+
+.empty-state{ text-align:center; padding:34px 16px; color:var(--success); }
+.empty-state .big{ font-size:28px; }
+
+/* colunas de exportação (lista reordenável) */
+.col-list{ display:flex; flex-direction:column; gap:8px; margin-top:14px; }
+.col-item{
+  display:grid; grid-template-columns:auto 1fr 1fr auto; gap:10px; align-items:center;
+  background:var(--surface-alt); border:1px solid var(--border); border-radius:9px; padding:9px 10px;
+}
+.col-item .grip{ color:var(--muted); font-family:var(--font-mono); font-size:12px; padding:0 2px; }
+.col-item .order-btns{ display:flex; flex-direction:column; gap:2px; }
+.col-item .order-btns button{ font-size:10px; padding:1px 5px; line-height:1; }
+@media (max-width:640px){
+  .col-item{ grid-template-columns:1fr 1fr; grid-template-areas:"grip remove" "label label" "source source"; }
+}
+
+fieldset{ border:1px solid var(--border); border-radius:10px; padding:16px; margin:0 0 16px; }
+legend{ padding:0 6px; font-size:12.5px; font-weight:700; color:var(--accent-strong); text-transform:uppercase; letter-spacing:.03em; }
+
+.toast-host{ position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom,0px)); z-index:60; display:flex; flex-direction:column; gap:8px; max-width:min(360px, calc(100vw - 32px)); }
+.toast{ background:var(--ink); color:var(--bg); padding:11px 14px; border-radius:9px; font-size:13px; box-shadow:var(--shadow); animation:toast-in .18s ease-out; }
+.toast.toast-err{ background:var(--danger); color:#fff; }
+.toast.toast-ok{ background:var(--success); color:#08201b; }
+@keyframes toast-in{ from{ transform:translateY(6px); opacity:0; } to{ transform:none; opacity:1; } }
+
+code.k{ background:var(--surface-alt); border:1px solid var(--border); padding:1px 5px; border-radius:5px; font-family:var(--font-mono); font-size:12px; }
+</style>
+
+<div class="app-shell">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-mark">±0</div>
+        <div>
+          <h1>Zerador de Conta Transitória</h1>
+          <p>Concilia o razão dia a dia e monta os lançamentos de ajuste</p>
+        </div>
+      </div>
+      <div class="steps-pills" id="stepsPills"></div>
+    </div>
+  </div>
+
+  <!-- ETAPA 1 — UPLOAD -->
+  <section class="step-card" id="card-upload">
+    <div class="step-head">
+      <div class="step-num">1</div>
+      <div>
+        <h2>Envie o razão contábil</h2>
+        <p class="step-sub">Aceita o CSV exportado do sistema (com o cabeçalho de metadados no topo) ou uma planilha .xlsx/.xls. O arquivo fica só no seu navegador — nada é enviado a um servidor.</p>
+      </div>
+    </div>
+
+    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Selecionar arquivo do razão contábil">
+      <strong>Arraste o arquivo aqui ou clique para escolher</strong>
+      <span>.csv · .txt · .xlsx · .xls</span>
+      <div id="fileChip" style="display:none"><span class="file-chip mono" id="fileChipText"></span></div>
+    </div>
+    <input type="file" id="fileInput" accept=".csv,.txt,.xlsx,.xls" hidden>
+
+    <div class="field-row" id="encodingRow" style="display:none">
+      <div class="field">
+        <label for="selEncoding">Codificação do arquivo</label>
+        <select id="selEncoding">
+          <option value="windows-1252">Windows-1252 / Latin-1 (padrão de relatórios ERP)</option>
+          <option value="utf-8">UTF-8</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="selDelimitador">Separador do arquivo</label>
+        <select id="selDelimitador">
+          <option value=";">Ponto e vírgula ( ; )</option>
+          <option value=",">Vírgula ( , )</option>
+          <option value="|">Pipe ( | )</option>
+          <option value="\t">Tabulação</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="previewArea" style="display:none">
+      <p class="hint" style="margin-top:16px">Clique na linha que é o <strong>cabeçalho da tabela</strong> (a linha destacada abaixo foi detectada automaticamente — confirme ou escolha outra).</p>
+      <div class="table-wrap" style="max-height:340px; overflow-y:auto">
+        <table id="previewTable"></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ETAPA 2 — MAPEAMENTO -->
+  <section class="step-card" id="card-mapping" data-locked="true">
+    <div class="step-head">
+      <div class="step-num">2</div>
+      <div>
+        <h2>Mapeamento de colunas</h2>
+        <p class="step-sub">Indique qual coluna da planilha original corresponde a cada campo. O sistema já tenta adivinhar pelos nomes do cabeçalho.</p>
+      </div>
+    </div>
+    <div class="field-row" id="mappingFields"></div>
+    <div class="table-wrap" style="margin-top:16px">
+      <table id="mappingPreviewTable"></table>
+    </div>
+    <div class="actions-row">
+      <button class="btn-primary" id="btnProcessar">Processar lançamentos →</button>
+      <span class="hint" id="mappingHint"></span>
+    </div>
+  </section>
+
+  <!-- ETAPA 3 — DIVERGÊNCIAS -->
+  <section class="step-card" id="card-divergencias" data-locked="true">
+    <div class="step-head">
+      <div class="step-num">3</div>
+      <div>
+        <h2>Dias que não fecham</h2>
+        <p class="step-sub">Agrupado por <strong>data + empresa + contrapartida</strong>. Quando débito e crédito do grupo não batem, aparece aqui com o lançamento de ajuste já calculado.</p>
+      </div>
+    </div>
+    <div class="summary-grid" id="summaryGrid"></div>
+    <div id="divergenciasArea"></div>
+  </section>
+
+  <!-- ETAPA 4 — EXPORTAÇÃO -->
+  <section class="step-card" id="card-export" data-locked="true">
+    <div class="step-head">
+      <div class="step-num">4</div>
+      <div>
+        <h2>Configuração e exportação</h2>
+        <p class="step-sub">Ajuste as contas padrão, o histórico e o layout do arquivo de saída — o modelo já vem pré-carregado com as 10 colunas do seu layout de importação.</p>
+      </div>
+    </div>
+
+    <fieldset>
+      <legend>Contas do lançamento de ajuste</legend>
+      <p class="hint" style="margin:0 0 12px">
+        Regra usada: se sobrar <span class="tag tag-debito">DÉBITO</span> no grupo, o ajuste debita a <strong>Conta Débito Padrão</strong> e credita a conta transitória informada. Se sobrar <span class="tag tag-credito">CRÉDITO</span>, o ajuste credita a <strong>Conta Crédito Padrão</strong> e debita a conta transitória. Ajuste esses campos se sua regra real for outra.
+      </p>
+      <div class="field-row">
+        <div class="field"><label for="cfgContaTransitoria">Conta transitória (a que está sendo zerada)</label><input type="text" id="cfgContaTransitoria" placeholder="ex: 1.1.1.02.0016"></div>
+        <div class="field"><label for="cfgContaDebito">Conta débito padrão</label><input type="text" id="cfgContaDebito" placeholder="ex: 999999"></div>
+        <div class="field"><label for="cfgContaCredito">Conta crédito padrão</label><input type="text" id="cfgContaCredito" placeholder="ex: 999999"></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Histórico</legend>
+      <div class="field-row">
+        <div class="field"><label for="cfgCodigoHistorico">Código do histórico padrão</label><input type="text" id="cfgCodigoHistorico" placeholder="ex: 306"></div>
+        <div class="field" style="flex:2 1 320px">
+          <label for="cfgComplemento">Complemento (texto do lançamento)</label>
+          <input type="text" id="cfgComplemento" value="{historico}">
+        </div>
+      </div>
+      <p class="hint">Use <code class="k">{historico}</code> (histórico do último lançamento do grupo), <code class="k">{data}</code>, <code class="k">{emp}</code>, <code class="k">{cpartida}</code>, <code class="k">{valor}</code> como marcadores.</p>
+    </fieldset>
+
+    <fieldset>
+      <legend>Centro de custo e agrupador (opcionais)</legend>
+      <div class="field-row">
+        <div class="field"><label for="cfgCentroDebito">Centro de custo débito</label><input type="text" id="cfgCentroDebito" placeholder="opcional"></div>
+        <div class="field"><label for="cfgCentroCredito">Centro de custo crédito</label><input type="text" id="cfgCentroCredito" placeholder="opcional"></div>
+        <div class="field">
+          <label for="cfgAgrupadorModo">Código agrupador</label>
+          <select id="cfgAgrupadorModo">
+            <option value="vazio">Deixar em branco</option>
+            <option value="sequencial">Numerar sequencialmente (1, 2, 3…)</option>
+            <option value="fixo">Usar valor fixo</option>
+          </select>
+        </div>
+        <div class="field" id="cfgAgrupadorFixoWrap" style="display:none"><label for="cfgAgrupadorFixo">Valor fixo do agrupador</label><input type="text" id="cfgAgrupadorFixo"></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Formato do arquivo de saída</legend>
+      <div class="field-row">
+        <div class="field"><label for="cfgFormatoArquivo">Formato</label>
+          <select id="cfgFormatoArquivo"><option value="csv">CSV</option><option value="txt">TXT</option></select>
+        </div>
+        <div class="field"><label for="cfgSeparador">Separador</label>
+          <select id="cfgSeparador">
+            <option value=";">Ponto e vírgula ( ; )</option>
+            <option value=",">Vírgula ( , )</option>
+            <option value="|">Pipe ( | )</option>
+          </select>
+        </div>
+        <div class="field"><label for="cfgDecimal">Separador decimal do valor</label>
+          <select id="cfgDecimal"><option value=",">Vírgula (1234,56)</option><option value=".">Ponto (1234.56)</option></select>
+        </div>
+        <div class="field"><label for="cfgFormatoData">Formato da data</label>
+          <select id="cfgFormatoData">
+            <option value="DD/MM/AAAA">DD/MM/AAAA</option>
+            <option value="AAAA-MM-DD">AAAA-MM-DD</option>
+            <option value="DDMMAAAA">DDMMAAAA</option>
+            <option value="MM/DD/AAAA">MM/DD/AAAA</option>
+          </select>
+        </div>
+        <div class="field"><label for="cfgEncodingSaida">Codificação de saída</label>
+          <select id="cfgEncodingSaida"><option value="utf-8">UTF-8</option><option value="windows-1252">Windows-1252 / Latin-1</option></select>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Colunas do arquivo (ordem, nome e origem do dado)</legend>
+      <div class="col-list" id="colList"></div>
+      <button class="btn-secondary" id="btnAddCol" style="margin-top:10px">+ Adicionar coluna</button>
+    </fieldset>
+
+    <div class="table-wrap">
+      <table id="exportPreviewTable"></table>
+    </div>
+
+    <div class="actions-row">
+      <button class="btn-primary" id="btnBaixar">Baixar arquivo de ajustes</button>
+      <span class="hint" id="exportHint"></span>
+    </div>
+  </section>
+</div>
+
+<div class="toast-host" id="toastHost"></div>
+
+<!-- SheetJS: leitura de .xlsx / .xls -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<script>
+// -----------------------------------------------------------------
+// PONTE DE CAPACIDADES: quando esta ferramenta roda dentro de um
+// iframe do hub, repassa window.claude.use(...) para a janela pai.
+// Fora do hub (arquivo aberto sozinho), não faz nada e usa o suporte
+// nativo normalmente.
+// -----------------------------------------------------------------
+(function(){
+  if (window.top === window.self) return;
+  if (window.claude && window.claude.use) return;
+  let proximoId = 1;
+  const pendentes = {};
+  window.addEventListener('message', (ev) => {
+    const msg = ev.data;
+    if (!msg || msg.__ponteClaude !== true || msg.tipo !== 'resposta') return;
+    const p = pendentes[msg.id];
+    if (!p) return;
+    delete pendentes[msg.id];
+    if (msg.erro) p.reject(msg.erro); else p.resolve(msg.resultado);
+  });
+  function chamarHub(acao, payload){
+    return new Promise((resolve, reject) => {
+      const id = proximoId++;
+      pendentes[id] = { resolve, reject };
+      window.parent.postMessage({ __ponteClaude: true, tipo: 'chamada', id, acao, payload }, '*');
+    });
+  }
+  window.claude = {
+    use: async (nome) => {
+      if (nome !== 'downloads') return null;
+      return { save: (req) => chamarHub('downloads.save', req) };
+    }
+  };
+})();
+
+/* =====================================================================
+   ZERADOR DE CONTA TRANSITÓRIA
+   Aplicação 100% client-side: lê o razão contábil, agrupa por
+   dia + empresa + contrapartida, detecta grupos em que débito e
+   crédito não fecham, e monta o arquivo de lançamentos de ajuste.
+   ===================================================================== */
+
+// ---------------------------------------------------------------------
+// ESTADO GLOBAL DA APLICAÇÃO
+// ---------------------------------------------------------------------
+const state = {
+  fileName: null,
+  fileExt: null,
+  isSpreadsheet: false,
+  encoding: 'windows-1252',
+  delimiter: ';',
+  grid: [],              // matriz bruta (linhas x colunas) do arquivo inteiro
+  headerRowIndex: null,   // índice da linha escolhida como cabeçalho
+  headers: [],            // rótulos da linha de cabeçalho
+  mapping: { data: -1, emp: -1, cpartida: -1, historico: -1, debito: -1, credito: -1, contaPrincipal: -1 },
+  entries: [],             // lançamentos individuais já interpretados
+  groups: [],              // grupos (dia+empresa+contrapartida) com totais
+  processed: false,
+  config: {
+    contaTransitoria: '',
+    contaDebitoPadrao: '',
+    contaCreditoPadrao: '',
+    codigoHistoricoPadrao: '',
+    complementoTemplate: '{historico}',
+    centroCustoDebito: '',
+    centroCustoCredito: '',
+    agrupadorModo: 'vazio',
+    agrupadorFixo: '',
+    formatoArquivo: 'csv',
+    separadorSaida: ';',
+    decimalSaida: ',',
+    formatoData: 'DD/MM/AAAA',
+    encodingSaida: 'utf-8',
+    colunas: [
+      { label: 'CÓDIGO EMPRESA*',            source: 'empresa' },
+      { label: 'DATA LANÇAMENTO*',           source: 'data' },
+      { label: 'CONTA DEBITO',               source: 'contaDebito' },
+      { label: 'CONTA CREDITO',              source: 'contaCredito' },
+      { label: 'CÓDIGO HISTÓRICO PADRÃO',    source: 'codigoHistorico' },
+      { label: 'COMPLEMENTO',                source: 'complemento' },
+      { label: 'VALOR LANÇAMENTO*',          source: 'valor' },
+      { label: 'CENTRO CUSTO DEBITO',        source: 'centroCustoDebito' },
+      { label: 'CENTRO CUSTO CREDITO',       source: 'centroCustoCredito' },
+      { label: 'CÓDIGO AGRUPADOR',           source: 'codigoAgrupador' },
+    ],
+  },
+};
+
+const SOURCE_OPTIONS = [
+  ['empresa', 'Código da empresa (EMP)'],
+  ['data', 'Data do lançamento'],
+  ['contaDebito', 'Conta débito (calculada)'],
+  ['contaCredito', 'Conta crédito (calculada)'],
+  ['codigoHistorico', 'Código histórico padrão'],
+  ['complemento', 'Complemento (histórico do lançamento)'],
+  ['valor', 'Valor do ajuste'],
+  ['centroCustoDebito', 'Centro de custo débito'],
+  ['centroCustoCredito', 'Centro de custo crédito'],
+  ['codigoAgrupador', 'Código agrupador'],
+  ['contrapartida', 'Código contrapartida (C/PARTIDA)'],
+  ['textoFixo', 'Texto fixo…'],
+  ['vazio', 'Deixar em branco'],
+];
+
+// ---------------------------------------------------------------------
+// UTILITÁRIOS DE TEXTO / NÚMERO / DATA
+// ---------------------------------------------------------------------
+function normalizar(s){
+  return (s ?? '').toString().normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
+}
+
+// Converte "1.234,56" (padrão BR) ou "1234.56" em número JS.
+function parseNumeroBR(valor){
+  if (valor === null || valor === undefined) return 0;
+  let s = valor.toString().trim();
+  if (s === '') return 0;
+  let negativo = false;
+  if (/^\(.*\)$/.test(s)) { negativo = true; s = s.slice(1, -1); }
+  s = s.replace(/[^0-9,.\-]/g, '');
+  if (s.includes(',') && s.includes('.')) {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (s.includes(',')) {
+    s = s.replace(',', '.');
+  }
+  const n = parseFloat(s);
+  if (isNaN(n)) return 0;
+  return negativo ? -n : n;
+}
+
+// Converte string de data (DD/MM/AAAA, AAAA-MM-DD ou serial do Excel) em Date (UTC).
+function parseDataBR(valor){
+  if (valor === null || valor === undefined) return null;
+  const s = valor.toString().trim();
+  if (s === '') return null;
+  let m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return new Date(Date.UTC(+m[3], +m[2] - 1, +m[1]));
+  m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  if (/^\d+(\.\d+)?$/.test(s)) {
+    const serial = parseFloat(s);
+    if (serial > 20000 && serial < 80000) {
+      return new Date(Date.UTC(1899, 11, 30) + serial * 86400000);
+    }
+  }
+  return null;
+}
+
+function dataParaISO(d){
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth()+1).padStart(2,'0')}-${String(d.getUTCDate()).padStart(2,'0')}`;
+}
+
+function formatarData(iso, formato){
+  const [y, m, d] = iso.split('-');
+  switch (formato) {
+    case 'AAAA-MM-DD': return `${y}-${m}-${d}`;
+    case 'DDMMAAAA':   return `${d}${m}${y}`;
+    case 'MM/DD/AAAA':  return `${m}/${d}/${y}`;
+    default:            return `${d}/${m}/${y}`;
+  }
+}
+
+function arredondar2(n){ return Math.round((n + Number.EPSILON) * 100) / 100; }
+
+function formatarValor(n, decimalChar){
+  const fixo = Math.abs(n).toFixed(2);
+  return decimalChar === ',' ? fixo.replace('.', ',') : fixo;
+}
+
+// Parser de uma linha de CSV/TXT respeitando aspas duplas.
+function parseLinhaCSV(linha, delimitador){
+  const campos = [];
+  let atual = '';
+  let dentroAspas = false;
+  for (let i = 0; i < linha.length; i++) {
+    const c = linha[i];
+    if (dentroAspas) {
+      if (c === '"') {
+        if (linha[i+1] === '"') { atual += '"'; i++; }
+        else dentroAspas = false;
+      } else atual += c;
+    } else {
+      if (c === '"') dentroAspas = true;
+      else if (c === delimitador) { campos.push(atual); atual = ''; }
+      else atual += c;
+    }
+  }
+  campos.push(atual);
+  return campos.map(c => c.trim());
+}
+
+// ---------------------------------------------------------------------
+// TOASTS
+// ---------------------------------------------------------------------
+function toast(msg, tipo){
+  const host = document.getElementById('toastHost');
+  const el = document.createElement('div');
+  el.className = 'toast' + (tipo === 'erro' ? ' toast-err' : tipo === 'ok' ? ' toast-ok' : '');
+  el.textContent = msg;
+  host.appendChild(el);
+  setTimeout(() => el.remove(), 4200);
+}
+
+// ---------------------------------------------------------------------
+// PASSO 1 — UPLOAD E DETECÇÃO DA LINHA DE CABEÇALHO
+// ---------------------------------------------------------------------
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+['dragenter','dragover'].forEach(ev => dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.add('is-dragover'); }));
+['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, (e) => { e.preventDefault(); dropzone.classList.remove('is-dragover'); }));
+dropzone.addEventListener('drop', (e) => { const f = e.dataTransfer.files[0]; if (f) carregarArquivo(f); });
+fileInput.addEventListener('change', (e) => { const f = e.target.files[0]; if (f) carregarArquivo(f); });
+
+document.getElementById('selEncoding').addEventListener('change', (e) => { state.encoding = e.target.value; reprocessarTexto(); });
+document.getElementById('selDelimitador').addEventListener('change', (e) => { state.delimiter = e.target.value === '\\t' ? '\t' : e.target.value; reprocessarTexto(); });
+
+let ultimoArrayBuffer = null;
+
+function carregarArquivo(file){
+  state.fileName = file.name;
+  state.fileExt = file.name.split('.').pop().toLowerCase();
+  state.isSpreadsheet = ['xlsx','xls'].includes(state.fileExt);
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    ultimoArrayBuffer = e.target.result;
+    document.getElementById('fileChip').style.display = 'inline-block';
+    document.getElementById('fileChipText').textContent = '📎 ' + file.name;
+    document.getElementById('encodingRow').style.display = state.isSpreadsheet ? 'none' : 'flex';
+
+    if (state.isSpreadsheet) {
+      montarGridDePlanilha(ultimoArrayBuffer);
+    } else {
+      reprocessarTexto();
+    }
+  };
+  reader.onerror = () => toast('Não foi possível ler o arquivo.', 'erro');
+  reader.readAsArrayBuffer(file);
+}
+
+function montarGridDePlanilha(buffer){
+  try {
+    const wb = XLSX.read(buffer, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const linhas = XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
+    state.grid = linhas.map(l => l.map(c => (c ?? '').toString()));
+    aposCarregarGrid();
+  } catch (err) {
+    toast('Erro ao ler a planilha: ' + err.message, 'erro');
+  }
+}
+
+function reprocessarTexto(){
+  if (!ultimoArrayBuffer || state.isSpreadsheet) return;
+  try {
+    const texto = new TextDecoder(state.encoding).decode(ultimoArrayBuffer);
+    const linhas = texto.split(/\r\n|\r|\n/);
+    state.grid = linhas.filter((l, i) => !(l === '' && i === linhas.length - 1))
+                        .map(l => parseLinhaCSV(l, state.delimiter));
+    aposCarregarGrid();
+  } catch (err) {
+    toast('Erro ao interpretar o texto: ' + err.message, 'erro');
+  }
+}
+
+const TOKENS_CABECALHO = ['DTA', 'DATA', 'EMP', 'PARTIDA', 'HIST', 'DEB', 'CRED', 'PLANO CONTABIL'];
+
+function detectarLinhaCabecalho(grid){
+  let melhorIdx = 0, melhorScore = -1;
+  const limite = Math.min(grid.length, 60);
+  for (let i = 0; i < limite; i++) {
+    const linha = grid[i] || [];
+    let score = 0;
+    linha.forEach(cel => {
+      const n = normalizar(cel);
+      if (n) TOKENS_CABECALHO.forEach(t => { if (n.includes(t)) score++; });
+    });
+    if (linha.filter(c => c && c.toString().trim() !== '').length < 3) continue;
+    if (score > melhorScore) { melhorScore = score; melhorIdx = i; }
+  }
+  return melhorScore > 0 ? melhorIdx : 0;
+}
+
+function aposCarregarGrid(){
+  state.headerRowIndex = detectarLinhaCabecalho(state.grid);
+  renderPreviewBruto();
+  selecionarLinhaCabecalho(state.headerRowIndex);
+  document.getElementById('previewArea').style.display = 'block';
+}
+
+function renderPreviewBruto(){
+  const table = document.getElementById('previewTable');
+  const linhasParaMostrar = state.grid.slice(0, 40);
+  const maxCols = Math.max(1, ...linhasParaMostrar.map(l => l.length));
+  let html = '<tbody>';
+  linhasParaMostrar.forEach((linha, i) => {
+    html += `<tr class="raw-row" data-idx="${i}"><td class="idx">${i}</td>`;
+    for (let c = 0; c < maxCols; c++) html += `<td>${escapeHTML(linha[c] ?? '')}</td>`;
+    html += '</tr>';
+  });
+  html += '</tbody>';
+  table.innerHTML = html;
+  table.querySelectorAll('.raw-row').forEach(tr => {
+    tr.addEventListener('click', () => selecionarLinhaCabecalho(+tr.dataset.idx));
+  });
+}
+
+function escapeHTML(s){
+  return s.toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function selecionarLinhaCabecalho(idx){
+  state.headerRowIndex = idx;
+  state.headers = (state.grid[idx] || []).map(h => (h ?? '').toString().trim());
+  document.querySelectorAll('#previewTable .raw-row').forEach(tr => {
+    tr.classList.toggle('is-header', +tr.dataset.idx === idx);
+  });
+  autoMapearColunas();
+  desbloquear('card-mapping');
+  renderMapping();
+  atualizarStepsPills();
+}
+
+// ---------------------------------------------------------------------
+// PASSO 2 — MAPEAMENTO DE COLUNAS
+// ---------------------------------------------------------------------
+const CAMPOS_MAPEAMENTO = [
+  ['data', 'Data do lançamento', ['DTA', 'DATA']],
+  ['emp', 'Código empresa (EMP)', ['EMP', 'EMPRESA']],
+  ['cpartida', 'Contrapartida (C/PARTIDA)', ['PARTIDA']],
+  ['historico', 'Histórico', ['HIST']],
+  ['debito', 'Débito', ['DEB']],
+  ['credito', 'Crédito', ['CRED']],
+  ['contaPrincipal', 'Conta analisada (opcional)', ['PLANO CONTABIL']],
+];
+
+function autoMapearColunas(){
+  CAMPOS_MAPEAMENTO.forEach(([campo, , tokens]) => {
+    let achou = -1;
+    for (let c = 0; c < state.headers.length; c++) {
+      const n = normalizar(state.headers[c]);
+      if (tokens.some(t => n.includes(t))) { achou = c; break; }
+    }
+    state.mapping[campo] = achou;
+  });
+}
+
+function renderMapping(){
+  const wrap = document.getElementById('mappingFields');
+  wrap.innerHTML = '';
+  CAMPOS_MAPEAMENTO.forEach(([campo, rotulo]) => {
+    const div = document.createElement('div');
+    div.className = 'field';
+    const opts = state.headers.map((h, i) => `<option value="${i}">${escapeHTML(h || '(coluna '+i+')')}</option>`).join('');
+    div.innerHTML = `<label for="map-${campo}">${rotulo}${campo==='contaPrincipal' ? '' : ' *'}</label>
+      <select id="map-${campo}"><option value="-1">— não definido —</option>${opts}</select>`;
+    wrap.appendChild(div);
+    const sel = div.querySelector('select');
+    sel.value = state.mapping[campo];
+    sel.addEventListener('change', () => { state.mapping[campo] = +sel.value; renderMappingPreview(); });
+  });
+  renderMappingPreview();
+}
+
+function renderMappingPreview(){
+  const table = document.getElementById('mappingPreviewTable');
+  const linhasDados = state.grid.slice(state.headerRowIndex + 1, state.headerRowIndex + 6);
+  const campos = CAMPOS_MAPEAMENTO.filter(([c]) => c !== 'contaPrincipal');
+  let html = '<thead><tr>' + campos.map(([, r]) => `<th>${r}</th>`).join('') + '</tr></thead><tbody>';
+  linhasDados.forEach(linha => {
+    html += '<tr>' + campos.map(([campo]) => {
+      const idx = state.mapping[campo];
+      const val = idx >= 0 ? (linha[idx] ?? '') : '';
+      return `<td>${escapeHTML(val)}</td>`;
+    }).join('') + '</tr>';
+  });
+  html += '</tbody>';
+  table.innerHTML = html;
+
+  const obrigatorios = ['data','emp','cpartida','historico','debito','credito'];
+  const faltando = obrigatorios.filter(c => state.mapping[c] < 0);
+  const hint = document.getElementById('mappingHint');
+  document.getElementById('btnProcessar').disabled = faltando.length > 0;
+  hint.textContent = faltando.length ? 'Falta mapear: ' + faltando.join(', ') : 'Prévia das primeiras linhas de dados acima — confira se bateu certinho.';
+  hint.className = 'hint' + (faltando.length ? ' warn' : '');
+}
+
+document.getElementById('btnProcessar').addEventListener('click', processarLancamentos);
+
+// ---------------------------------------------------------------------
+// PASSO 3 — PROCESSAMENTO E DIVERGÊNCIAS
+// ---------------------------------------------------------------------
+function processarLancamentos(){
+  const entries = [];
+  let contaDetectada = '';
+  for (let i = state.headerRowIndex + 1; i < state.grid.length; i++) {
+    const linha = state.grid[i];
+    if (!linha || linha.every(c => !c || c.toString().trim() === '')) continue;
+
+    const cpartida = (linha[state.mapping.cpartida] ?? '').toString().trim();
+    const dataObj = parseDataBR(linha[state.mapping.data]);
+    if (!cpartida || !dataObj) continue; // ignora metadados/linhas de saldo/rodapé
+
+    const emp = (linha[state.mapping.emp] ?? '').toString().trim();
+    const historico = (linha[state.mapping.historico] ?? '').toString().trim();
+    const debito = parseNumeroBR(linha[state.mapping.debito]);
+    const credito = parseNumeroBR(linha[state.mapping.credito]);
+
+    if (state.mapping.contaPrincipal >= 0 && !contaDetectada) {
+      const v = (linha[state.mapping.contaPrincipal] ?? '').toString().trim();
+      if (v) contaDetectada = v;
+    }
+
+    entries.push({ rowIndex: i, dataISO: dataParaISO(dataObj), emp, cpartida, historico, debito, credito });
+  }
+  state.entries = entries;
+
+  if (entries.length === 0) {
+    toast('Nenhum lançamento reconhecido. Confira o mapeamento de colunas.', 'erro');
+    return;
+  }
+
+  // agrupamento por dia + empresa + contrapartida
+  const mapa = new Map();
+  entries.forEach(e => {
+    const chave = `${e.dataISO}|${e.emp}|${e.cpartida}`;
+    if (!mapa.has(chave)) mapa.set(chave, { dataISO: e.dataISO, emp: e.emp, cpartida: e.cpartida, debito: 0, credito: 0, qtd: 0, ultimoHistorico: '' });
+    const g = mapa.get(chave);
+    g.debito += e.debito;
+    g.credito += e.credito;
+    g.qtd += 1;
+    g.ultimoHistorico = e.historico || g.ultimoHistorico; // último lançamento do grupo, na ordem do arquivo
+  });
+
+  const grupos = Array.from(mapa.values()).map(g => {
+    const diferenca = arredondar2(g.debito - g.credito);
+    return { ...g, debito: arredondar2(g.debito), credito: arredondar2(g.credito), diferenca, divergente: Math.abs(diferenca) > 0.000001 };
+  });
+  grupos.sort((a,b) => a.dataISO.localeCompare(b.dataISO) || a.emp.localeCompare(b.emp) || a.cpartida.localeCompare(b.cpartida));
+  state.groups = grupos;
+  state.processed = true;
+
+  if (contaDetectada && !state.config.contaTransitoria) {
+    state.config.contaTransitoria = contaDetectada;
+    document.getElementById('cfgContaTransitoria').value = contaDetectada;
+  }
+
+  renderResumoEDivergencias();
+  desbloquear('card-divergencias');
+  desbloquear('card-export');
+  renderConfigPreview();
+  atualizarStepsPills();
+  toast(`${entries.length} lançamentos processados em ${grupos.length} grupos.`, 'ok');
+}
+
+function renderResumoEDivergencias(){
+  const grupos = state.groups;
+  const divergentes = grupos.filter(g => g.divergente);
+  const totalAjuste = divergentes.reduce((s,g) => s + Math.abs(g.diferenca), 0);
+  const dias = new Set(grupos.map(g => g.dataISO)).size;
+
+  document.getElementById('summaryGrid').innerHTML = `
+    <div class="summary-tile"><div class="n mono">${state.entries.length}</div><div class="l">Lançamentos lidos</div></div>
+    <div class="summary-tile"><div class="n mono">${dias}</div><div class="l">Dias no período</div></div>
+    <div class="summary-tile"><div class="n mono">${grupos.length}</div><div class="l">Grupos (dia+emp+contrapartida)</div></div>
+    <div class="summary-tile ${divergentes.length ? 'warn' : 'accent'}"><div class="n mono">${divergentes.length}</div><div class="l">Grupos divergentes</div></div>
+    <div class="summary-tile ${divergentes.length ? 'warn' : 'accent'}"><div class="n mono">${formatarValor(totalAjuste, ',')}</div><div class="l">Total a ajustar (R$)</div></div>
+  `;
+
+  const area = document.getElementById('divergenciasArea');
+  if (divergentes.length === 0) {
+    area.innerHTML = `<div class="empty-state"><div class="big">✓</div><p>Todos os grupos fecharam certinho — nenhum ajuste necessário.</p></div>`;
+    return;
+  }
+
+  let html = `<div class="table-wrap"><table><thead><tr>
+    <th>Data</th><th>Empresa</th><th>Contrapartida</th><th>Qtd. lanç.</th>
+    <th>Débito</th><th>Crédito</th><th>Diferença</th><th>Ajuste gerado</th><th>Histórico (último lanç.)</th>
+  </tr></thead><tbody>`;
+  divergentes.forEach(g => {
+    const sobraDebito = g.diferenca > 0;
+    const tagAjuste = sobraDebito
+      ? `<span class="tag tag-debito">DÉBITO ${escapeHTML(state.config.contaDebitoPadrao || '?')} / CRÉDITO ${escapeHTML(state.config.contaTransitoria || '?')}</span>`
+      : `<span class="tag tag-credito">CRÉDITO ${escapeHTML(state.config.contaCreditoPadrao || '?')} / DÉBITO ${escapeHTML(state.config.contaTransitoria || '?')}</span>`;
+    html += `<tr>
+      <td class="mono">${formatarData(g.dataISO, 'DD/MM/AAAA')}</td>
+      <td class="mono">${escapeHTML(g.emp)}</td>
+      <td class="mono">${escapeHTML(g.cpartida)}</td>
+      <td class="mono">${g.qtd}</td>
+      <td class="mono">${formatarValor(g.debito, ',')}</td>
+      <td class="mono">${formatarValor(g.credito, ',')}</td>
+      <td class="mono ${sobraDebito ? 'valor-pos' : 'valor-neg'}">${formatarValor(g.diferenca, ',')}</td>
+      <td>${tagAjuste}</td>
+      <td>${escapeHTML(g.ultimoHistorico)}</td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+  area.innerHTML = html;
+}
+
+// ---------------------------------------------------------------------
+// PASSO 4 — CONFIGURAÇÃO DE EXPORTAÇÃO
+// ---------------------------------------------------------------------
+const CONFIG_INPUT_IDS = {
+  contaTransitoria: 'cfgContaTransitoria', contaDebitoPadrao: 'cfgContaDebito', contaCreditoPadrao: 'cfgContaCredito',
+  codigoHistoricoPadrao: 'cfgCodigoHistorico', complementoTemplate: 'cfgComplemento',
+  centroCustoDebito: 'cfgCentroDebito', centroCustoCredito: 'cfgCentroCredito',
+  agrupadorModo: 'cfgAgrupadorModo', agrupadorFixo: 'cfgAgrupadorFixo',
+  formatoArquivo: 'cfgFormatoArquivo', separadorSaida: 'cfgSeparador', decimalSaida: 'cfgDecimal',
+  formatoData: 'cfgFormatoData', encodingSaida: 'cfgEncodingSaida',
+};
+Object.entries(CONFIG_INPUT_IDS).forEach(([campo, id]) => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    state.config[campo] = el.value;
+    if (campo === 'agrupadorModo') {
+      document.getElementById('cfgAgrupadorFixoWrap').style.display = el.value === 'fixo' ? 'flex' : 'none';
+    }
+    if (['contaTransitoria','contaDebitoPadrao','contaCreditoPadrao'].includes(campo)) renderResumoEDivergencias();
+    renderConfigPreview();
+  });
+});
+
+function renderColList(){
+  const wrap = document.getElementById('colList');
+  wrap.innerHTML = '';
+  state.config.colunas.forEach((col, i) => {
+    const row = document.createElement('div');
+    row.className = 'col-item';
+    const opts = SOURCE_OPTIONS.map(([v, l]) => `<option value="${v}" ${col.source === v ? 'selected' : ''}>${l}</option>`).join('');
+    row.innerHTML = `
+      <div class="grip">
+        <div class="order-btns">
+          <button class="btn-icon" data-act="up" title="Mover para cima">▲</button>
+          <button class="btn-icon" data-act="down" title="Mover para baixo">▼</button>
+        </div>
+      </div>
+      <input type="text" data-act="label" value="${escapeHTML(col.label)}" placeholder="Nome da coluna">
+      <select data-act="source">${opts}</select>
+      <button class="btn-icon" data-act="remove" title="Remover coluna">✕</button>
+    `;
+    row.querySelector('[data-act="label"]').addEventListener('input', (e) => { col.label = e.target.value; renderConfigPreview(); });
+    row.querySelector('[data-act="source"]').addEventListener('change', (e) => { col.source = e.target.value; renderConfigPreview(); });
+    row.querySelector('[data-act="remove"]').addEventListener('click', () => { state.config.colunas.splice(i,1); renderColList(); renderConfigPreview(); });
+    row.querySelector('[data-act="up"]').addEventListener('click', () => { if (i>0){ [state.config.colunas[i-1], state.config.colunas[i]] = [state.config.colunas[i], state.config.colunas[i-1]]; renderColList(); renderConfigPreview(); } });
+    row.querySelector('[data-act="down"]').addEventListener('click', () => { if (i<state.config.colunas.length-1){ [state.config.colunas[i+1], state.config.colunas[i]] = [state.config.colunas[i], state.config.colunas[i+1]]; renderColList(); renderConfigPreview(); } });
+    wrap.appendChild(row);
+  });
+}
+document.getElementById('btnAddCol').addEventListener('click', () => {
+  state.config.colunas.push({ label: 'Nova coluna', source: 'vazio' });
+  renderColList(); renderConfigPreview();
+});
+
+function resolverComplemento(grupo){
+  return state.config.complementoTemplate
+    .replaceAll('{historico}', grupo.ultimoHistorico || '')
+    .replaceAll('{data}', formatarData(grupo.dataISO, state.config.formatoData))
+    .replaceAll('{emp}', grupo.emp || '')
+    .replaceAll('{cpartida}', grupo.cpartida || '')
+    .replaceAll('{valor}', formatarValor(Math.abs(grupo.diferenca), state.config.decimalSaida));
+}
+
+function resolverColuna(col, grupo, indice){
+  const sobraDebito = grupo.diferenca > 0;
+  switch (col.source) {
+    case 'empresa': return grupo.emp;
+    case 'data': return formatarData(grupo.dataISO, state.config.formatoData);
+    case 'contaDebito': return sobraDebito ? state.config.contaDebitoPadrao : state.config.contaTransitoria;
+    case 'contaCredito': return sobraDebito ? state.config.contaTransitoria : state.config.contaCreditoPadrao;
+    case 'codigoHistorico': return state.config.codigoHistoricoPadrao;
+    case 'complemento': return resolverComplemento(grupo);
+    case 'valor': return formatarValor(Math.abs(grupo.diferenca), state.config.decimalSaida);
+    case 'centroCustoDebito': return state.config.centroCustoDebito;
+    case 'centroCustoCredito': return state.config.centroCustoCredito;
+    case 'contrapartida': return grupo.cpartida;
+    case 'codigoAgrupador':
+      if (state.config.agrupadorModo === 'sequencial') return String(indice + 1);
+      if (state.config.agrupadorModo === 'fixo') return state.config.agrupadorFixo;
+      return '';
+    case 'textoFixo': return col.fixo || '';
+    default: return '';
+  }
+}
+
+function gerarLinhasExportacao(){
+  return state.groups.filter(g => g.divergente).map((g, i) => state.config.colunas.map(col => resolverColuna(col, g, i)));
+}
+
+function renderConfigPreview(){
+  const table = document.getElementById('exportPreviewTable');
+  const linhas = gerarLinhasExportacao().slice(0, 6);
+  let html = '<thead><tr>' + state.config.colunas.map(c => `<th>${escapeHTML(c.label)}</th>`).join('') + '</tr></thead><tbody>';
+  if (linhas.length === 0) {
+    html += `<tr><td colspan="${state.config.colunas.length}" style="text-align:center;color:var(--muted);padding:18px">Sem grupos divergentes para exportar ainda.</td></tr>`;
+  } else {
+    linhas.forEach(linha => { html += '<tr>' + linha.map(v => `<td class="mono">${escapeHTML(v)}</td>`).join('') + '</tr>'; });
+  }
+  html += '</tbody>';
+  table.innerHTML = html;
+}
+
+function csvEscape(valor, sep){
+  const s = (valor ?? '').toString();
+  if (s.includes(sep) || s.includes('"') || s.includes('\n') || s.includes('\r')) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function montarConteudoExportacao(){
+  const sep = state.config.separadorSaida;
+  const linhas = [state.config.colunas.map(c => c.label).map(v => csvEscape(v, sep)).join(sep)];
+  gerarLinhasExportacao().forEach(linha => linhas.push(linha.map(v => csvEscape(v, sep)).join(sep)));
+  return linhas.join('\r\n') + '\r\n';
+}
+
+// Codifica string em UTF-8 (com BOM) ou Windows-1252/Latin-1 aproximado.
+function codificarParaBytes(texto, encoding){
+  if (encoding === 'utf-8') {
+    const corpo = new TextEncoder().encode(texto);
+    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+    const out = new Uint8Array(bom.length + corpo.length);
+    out.set(bom, 0); out.set(corpo, bom.length);
+    return out;
+  }
+  const bytes = new Uint8Array(texto.length);
+  for (let i = 0; i < texto.length; i++) {
+    const cp = texto.charCodeAt(i);
+    bytes[i] = cp <= 0xFF ? cp : 0x3F;
+  }
+  return bytes;
+}
+
+// ---------------------------------------------------------------------
+// DOWNLOAD (capability "downloads" do Artifact)
+// ---------------------------------------------------------------------
+document.getElementById('btnBaixar').addEventListener('click', baixarArquivo);
+
+async function baixarArquivo(){
+  const hint = document.getElementById('exportHint');
+  if (!state.processed || state.groups.filter(g => g.divergente).length === 0) {
+    toast('Não há lançamentos divergentes para exportar.', 'erro');
+    return;
+  }
+  if (typeof window.claude === 'undefined' || typeof window.claude.use !== 'function') {
+    hint.textContent = 'Download disponível apenas ao abrir este artefato no Claude.';
+    hint.className = 'hint err';
+    return;
+  }
+  const downloads = await window.claude.use('downloads');
+  if (!downloads) {
+    hint.textContent = 'Este visualizador não permite salvar arquivos agora.';
+    hint.className = 'hint err';
+    return;
+  }
+  const conteudo = montarConteudoExportacao();
+  const bytes = codificarParaBytes(conteudo, state.config.encodingSaida);
+  const blob = new Blob([bytes], { type: state.config.formatoArquivo === 'csv' ? 'text/csv' : 'text/plain' });
+  const nomeConta = (state.config.contaTransitoria || 'transitoria').replace(/[^\w.-]/g, '');
+  const filename = `ajustes_${nomeConta}.${state.config.formatoArquivo}`;
+  try {
+    const res = await downloads.save({ filename, data: blob });
+    toast(res.status === 'saved' ? 'Arquivo salvo com sucesso.' : 'Arquivo entregue.', 'ok');
+    hint.textContent = '';
+  } catch (err) {
+    const mapaErros = {
+      declined: 'Você cancelou o download.',
+      rejected_extension: 'Esse formato de arquivo não é aceito aqui — tente CSV ou TXT.',
+      too_large: 'O arquivo ficou grande demais para salvar aqui.',
+      rate_limited: 'Aguarde um instante e tente novamente.',
+    };
+    hint.textContent = mapaErros[err.code] || ('Não foi possível salvar o arquivo (' + err.code + ').');
+    hint.className = 'hint err';
+  }
+}
+
+// ---------------------------------------------------------------------
+// NAVEGAÇÃO / ESTADO DAS ETAPAS
+// ---------------------------------------------------------------------
+function desbloquear(id){ document.getElementById(id).dataset.locked = 'false'; }
+
+function atualizarStepsPills(){
+  const etapas = [
+    { id: 'upload', label: '1 · Upload', done: state.grid.length > 0 },
+    { id: 'mapeamento', label: '2 · Mapeamento', done: document.getElementById('card-mapping').dataset.locked === 'false' },
+    { id: 'divergencias', label: '3 · Divergências', done: state.processed },
+    { id: 'exportacao', label: '4 · Exportação', done: state.processed },
+  ];
+  const host = document.getElementById('stepsPills');
+  host.innerHTML = etapas.map(e => `<span class="step-pill ${e.done ? 'is-done' : ''}">${e.label}</span>`).join('');
+}
+
+// ---------------------------------------------------------------------
+// INICIALIZAÇÃO
+// ---------------------------------------------------------------------
+renderColList();
+renderConfigPreview();
+atualizarStepsPills();
+</script>
+
+</body>
+</html>

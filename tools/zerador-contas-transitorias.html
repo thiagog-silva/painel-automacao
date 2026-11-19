@@ -1,0 +1,1094 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="hub-nome" content="Zerador de Transitória">
+<meta name="hub-descricao" content="Aba feita exclusivamente para geração de lançamentos manuais conforme saldo final informado.">
+<meta name="hub-icone" content="⚖️">
+<meta name="hub-categoria" content="Conciliação">
+<title>Zerador de Contas Transitórias</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#f5f7f5;
+  --surface:#ffffff;
+  --surface-alt:#eef2ef;
+  --ink:#182420;
+  --muted:#5c6f68;
+  --border:#dbe3de;
+  --accent:#0f5d52;
+  --accent-strong:#0b453d;
+  --accent-ink:#f4fbf9;
+  --accent-soft:#e0efec;
+  --danger:#b3261e;
+  --danger-soft:#fbe9e6;
+  --warning:#8a5a00;
+  --warning-soft:#fff1d9;
+  --success:#1e7d4a;
+  --success-soft:#e5f4ea;
+  --tag-debito-bg:#fff1d9;
+  --tag-debito-ink:#8a5a00;
+  --tag-credito-bg:#e3edfb;
+  --tag-credito-ink:#1b4f8a;
+  --shadow: 0 1px 2px rgba(15,30,25,.06), 0 8px 24px -12px rgba(15,30,25,.22);
+  --radius:14px;
+  --font-display:'IBM Plex Sans Condensed', 'IBM Plex Sans', sans-serif;
+  --font-body:'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono:'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9;
+    --muted:#94a6a0; --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6;
+    --accent-ink:#08201b; --accent-soft:#1a332d; --danger:#ff9d93; --danger-soft:#3a201d;
+    --warning:#ffcf70; --warning-soft:#3a2c12; --success:#8fe3ac; --success-soft:#173425;
+    --tag-debito-bg:#3a2c12; --tag-debito-ink:#ffcf70; --tag-credito-bg:#182b3d; --tag-credito-ink:#8fc2ff;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9;
+  --muted:#94a6a0; --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6;
+  --accent-ink:#08201b; --accent-soft:#1a332d; --danger:#ff9d93; --danger-soft:#3a201d;
+  --warning:#ffcf70; --warning-soft:#3a2c12; --success:#8fe3ac; --success-soft:#173425;
+  --tag-debito-bg:#3a2c12; --tag-debito-ink:#ffcf70; --tag-credito-bg:#182b3d; --tag-credito-ink:#8fc2ff;
+  --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+}
+
+*{ box-sizing:border-box; }
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--font-body);
+  margin:0; padding-inline:16px; padding-block:20px 60px;
+}
+h1,h2,h3{ font-family:var(--font-display); font-weight:700; text-wrap:balance; margin:0; }
+.mono{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+.app-shell{ max-width:1180px; margin:0 auto; }
+
+.topbar{
+  position:sticky; top:env(safe-area-inset-top,0px); z-index:30;
+  background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--border); margin:-20px -16px 28px; padding:16px;
+}
+.topbar-inner{ max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:14px 24px; justify-content:space-between; }
+.brand{ display:flex; align-items:center; gap:12px; }
+.brand-mark{
+  width:38px; height:38px; border-radius:10px; background:var(--accent); color:var(--accent-ink);
+  display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-weight:700; font-size:15px;
+  box-shadow:var(--shadow); flex:none;
+}
+.brand h1{ font-size:19px; letter-spacing:.2px; }
+.brand p{ margin:2px 0 0; font-size:12.5px; color:var(--muted); }
+.steps-pills{ display:flex; gap:8px; flex-wrap:wrap; }
+.step-pill{
+  font-family:var(--font-mono); font-size:11.5px; letter-spacing:.03em; padding:6px 11px; border-radius:999px;
+  border:1px solid var(--border); color:var(--muted); background:var(--surface); white-space:nowrap;
+}
+.step-pill.is-active{ border-color:var(--accent); color:var(--accent-strong); background:var(--accent-soft); font-weight:600; }
+.step-pill.is-done{ color:var(--success); border-color:var(--success); }
+
+.step-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:26px; margin-bottom:22px; box-shadow:var(--shadow);
+}
+.step-card[data-locked="true"]{ opacity:.45; pointer-events:none; }
+.step-head{ display:flex; align-items:flex-start; gap:14px; margin-bottom:18px; justify-content:space-between; flex-wrap:wrap; }
+.step-head-main{ display:flex; align-items:flex-start; gap:14px; }
+.step-num{
+  width:32px; height:32px; border-radius:9px; background:var(--surface-alt); color:var(--ink);
+  font-family:var(--font-mono); font-weight:600; font-size:14px; display:flex; align-items:center; justify-content:center; flex:none;
+  border:1px solid var(--border);
+}
+.step-head h2{ font-size:20px; }
+.step-head .step-sub{ margin:3px 0 0; color:var(--muted); font-size:13.5px; max-width:64ch; }
+
+.dropzone{
+  border:1.5px dashed var(--border); border-radius:12px; padding:30px 20px; text-align:center;
+  background:var(--surface-alt); cursor:pointer; transition:border-color .15s, background .15s;
+}
+.dropzone:hover, .dropzone.is-dragover{ border-color:var(--accent); background:var(--accent-soft); }
+.dropzone strong{ display:block; font-size:15px; margin-bottom:4px; }
+.dropzone span{ font-size:12.5px; color:var(--muted); }
+.dropzone input{ display:none; }
+.file-chip{
+  display:inline-flex; align-items:center; gap:8px; margin-top:14px; padding:7px 12px; border-radius:9px;
+  background:var(--accent-soft); color:var(--accent-strong); font-size:13px; font-family:var(--font-mono);
+}
+.field-row{ display:flex; flex-wrap:wrap; gap:16px; margin-top:16px; }
+.field{ display:flex; flex-direction:column; gap:5px; min-width:190px; flex:1; }
+.field label{ font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.02em; text-transform:uppercase; }
+select, input[type="text"], input[type="number"], input[type="month"]{
+  font-family:var(--font-body); font-size:13.5px; padding:9px 10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--surface); color:var(--ink); width:100%;
+}
+select:focus, input:focus, button:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+
+.table-wrap{ overflow-x:auto; border:1px solid var(--border); border-radius:10px; margin-top:14px; }
+table{ border-collapse:collapse; width:100%; font-size:13px; }
+thead th{
+  position:sticky; top:0; background:var(--surface-alt); text-align:left; padding:9px 10px; font-size:11.5px;
+  text-transform:uppercase; letter-spacing:.04em; color:var(--muted); border-bottom:1px solid var(--border); white-space:nowrap;
+}
+tbody td{ padding:8px 10px; border-bottom:1px solid var(--border); }
+tbody tr:last-child td{ border-bottom:none; }
+tbody tr:hover{ background:var(--surface-alt); }
+td.num{ text-align:right; white-space:nowrap; }
+tr.is-negative td{ color:var(--danger); }
+table input[type="text"], table input[type="number"], table select{ padding:6px 8px; font-size:12.5px; min-width:110px; }
+
+button{ font-family:var(--font-body); cursor:pointer; border:none; border-radius:9px; font-weight:600; font-size:13.5px; }
+.btn-primary{ background:var(--accent); color:var(--accent-ink); padding:11px 20px; box-shadow:var(--shadow); }
+.btn-primary:disabled{ opacity:.45; cursor:not-allowed; box-shadow:none; }
+.btn-secondary{ background:var(--surface-alt); color:var(--ink); border:1px solid var(--border); padding:10px 16px; }
+.btn-ghost{ background:transparent; color:var(--muted); border:1px solid var(--border); padding:7px 10px; font-size:12px; }
+.btn-icon{ background:var(--surface-alt); border:1px solid var(--border); color:var(--ink); width:28px; height:28px; border-radius:7px; display:inline-flex; align-items:center; justify-content:center; padding:0; }
+.actions-row{ display:flex; flex-wrap:wrap; gap:12px; margin-top:18px; align-items:center; justify-content:space-between; }
+.hint{ font-size:12.5px; color:var(--muted); }
+.hint.warn{ color:var(--warning); }
+.hint.err{ color:var(--danger); }
+.hint.ok{ color:var(--success); font-weight:600; }
+
+.summary-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:6px; }
+.summary-tile{ background:var(--surface-alt); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+.summary-tile .n{ font-family:var(--font-mono); font-size:22px; font-weight:600; }
+.summary-tile .l{ font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin-top:2px; }
+.summary-tile.accent{ background:var(--accent-soft); }
+.summary-tile.accent .n{ color:var(--accent-strong); }
+.summary-tile.warn .n{ color:var(--warning); }
+
+.tag{ display:inline-flex; align-items:center; gap:5px; font-family:var(--font-mono); font-size:11.5px; font-weight:600; padding:4px 9px; border-radius:999px; white-space:nowrap; }
+.tag-debito{ background:var(--tag-debito-bg); color:var(--tag-debito-ink); }
+.tag-credito{ background:var(--tag-credito-bg); color:var(--tag-credito-ink); }
+
+.empty-state{ text-align:center; padding:34px 16px; color:var(--success); }
+.empty-state .big{ font-size:28px; }
+
+fieldset{ border:1px solid var(--border); border-radius:10px; padding:16px; margin:18px 0 0; }
+legend{ padding:0 6px; font-size:12.5px; font-weight:700; color:var(--accent-strong); text-transform:uppercase; letter-spacing:.03em; }
+
+.toast-host{ position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom,0px)); z-index:60; display:flex; flex-direction:column; gap:8px; max-width:min(360px, calc(100vw - 32px)); }
+.toast{ background:var(--ink); color:var(--bg); padding:11px 14px; border-radius:9px; font-size:13px; box-shadow:var(--shadow); animation:toast-in .18s ease-out; }
+.toast.toast-err{ background:var(--danger); color:#fff; }
+.toast.toast-ok{ background:var(--success); color:#08201b; }
+@keyframes toast-in{ from{ transform:translateY(6px); opacity:0; } to{ transform:none; opacity:1; } }
+
+code.k{ background:var(--surface-alt); border:1px solid var(--border); padding:1px 5px; border-radius:5px; font-family:var(--font-mono); font-size:12px; }
+
+.check-list{ display:flex; flex-direction:column; gap:10px; }
+.check-item{ border-radius:10px; padding:12px 14px; font-size:13px; display:flex; gap:10px; align-items:flex-start; }
+.check-item.ok{ background:var(--success-soft); color:var(--success); }
+.check-item.warn{ background:var(--warning-soft); color:var(--warning); }
+.check-item.err{ background:var(--danger-soft); color:var(--danger); }
+
+.grupo-card{ border:1px solid var(--border); border-radius:12px; padding:18px; margin-top:16px; background:var(--surface-alt); }
+.grupo-head{ display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+.grupo-head input[type="text"]{ font-weight:600; font-size:14.5px; max-width:320px; }
+.subtable-title{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); margin:16px 0 6px; }
+.arrow-step{ display:inline-flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:12px; color:var(--muted); margin:2px 6px; }
+.etapa-chain{ display:flex; flex-wrap:wrap; align-items:center; gap:4px; margin-top:8px; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-mark">ZT</div>
+        <div>
+          <h1>Zerador de Contas Transitórias</h1>
+          <p>Configure grupos de contas com regras próprias e gere os lançamentos de zeragem/ajuste do mês</p>
+        </div>
+      </div>
+      <div class="steps-pills">
+        <span class="step-pill" id="pill-1">1 · Configuração</span>
+        <span class="step-pill" id="pill-2">2 · Balancete</span>
+        <span class="step-pill" id="pill-3">3 · Validação</span>
+        <span class="step-pill" id="pill-4">4 · Lançamentos</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="step-head">
+      <div class="step-head-main">
+        <div class="step-num">1</div>
+        <div>
+          <h2>Grupos de contas e regras</h2>
+          <p class="step-sub">Cadastre os grupos (ex: "Caixas e Portadores"), as contas de cada grupo com sua regra (zerar / bater com relatório / saldo específico) e a cadeia de destino (para onde o saldo é transferido, em 1 ou mais etapas). Para "bater com relatório" ou "saldo específico", digite o valor alvo direto na coluna da tabela — sem precisar de uma etapa separada. Fica salvo neste navegador.</p>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn-secondary" id="btn-exportar-config">Exportar configuração (.json)</button>
+        <button class="btn-secondary" id="btn-importar-config">Importar configuração (.json)</button>
+        <button class="btn-secondary" id="btn-adicionar-grupo-json">+ Adicionar grupo(s) de um arquivo (.json)</button>
+        <input type="file" id="file-config" accept=".json" style="display:none;">
+        <input type="file" id="file-adicionar-grupo" accept=".json" style="display:none;">
+      </div>
+    </div>
+
+    <div id="grupos-container"></div>
+
+    <div class="actions-row">
+      <span class="hint" id="hint-config-saved">A configuração é salva automaticamente neste navegador.</span>
+      <button class="btn-primary" id="btn-novo-grupo">+ Novo grupo</button>
+    </div>
+  </div>
+
+  <div class="step-card" id="card-balancete">
+    <div class="step-head">
+      <div class="step-head-main">
+        <div class="step-num">2</div>
+        <div>
+          <h2>Balancete do mês</h2>
+          <p class="step-sub">Importe o balancete para a ferramenta ler o Saldo Final de cada conta configurada.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="dropzone" id="dz-balancete">
+      <input type="file" id="file-balancete" accept=".xlsx,.xls,.csv">
+      <strong>Clique ou arraste aqui o balancete (.xlsx ou .csv)</strong>
+      <span>Precisa ter as colunas CLASSIF., NOME DA CONTA, SALDO FINAL e a natureza D/C.</span>
+      <div id="chip-balancete"></div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="input-periodo">Período de referência</label>
+        <input type="month" id="input-periodo">
+        <span class="hint">Usado como último dia do mês na coluna "DATA LANÇAMENTO*".</span>
+      </div>
+      <div class="field">
+        <label for="input-empresa">Código empresa</label>
+        <input type="number" id="input-empresa" value="1">
+        <span class="hint">Usado na coluna "CÓDIGO EMPRESA*" do arquivo de importação.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-card" id="card-validacao" data-locked="true">
+    <div class="step-head">
+      <div class="step-head-main">
+        <div class="step-num">3</div>
+        <div>
+          <h2>Validação</h2>
+          <p class="step-sub">Conferência automática antes de gerar o arquivo.</p>
+        </div>
+      </div>
+    </div>
+    <div id="validacao-conteudo"></div>
+  </div>
+
+  <div class="step-card" id="card-preview" data-locked="true">
+    <div class="step-head">
+      <div class="step-head-main">
+        <div class="step-num">4</div>
+        <div>
+          <h2>Lançamentos gerados</h2>
+          <p class="step-sub">Confira as linhas antes de baixar a planilha de importação.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Grupo</th>
+            <th>Natureza</th>
+            <th>Conta débito</th>
+            <th>Conta crédito</th>
+            <th>Histórico</th>
+            <th>Complemento</th>
+            <th style="text-align:right;">Valor lançamento</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-preview"></tbody>
+      </table>
+    </div>
+
+    <div class="actions-row">
+      <span class="hint mono" id="nome-arquivo-preview"></span>
+      <button class="btn-primary" id="btn-baixar">Baixar planilha de importação (.xlsx)</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast-host" id="toast-host"></div>
+
+<script>
+(function(){
+  if (window.top === window.self) return;
+  if (window.claude && window.claude.use) return;
+  let proximoId = 1;
+  const pendentes = {};
+  window.addEventListener('message', (ev) => {
+    const msg = ev.data;
+    if (!msg || msg.__ponteClaude !== true || msg.tipo !== 'resposta') return;
+    const p = pendentes[msg.id];
+    if (!p) return;
+    delete pendentes[msg.id];
+    if (msg.erro) p.reject(msg.erro); else p.resolve(msg.resultado);
+  });
+  function chamarHub(acao, payload){
+    return new Promise((resolve, reject) => {
+      const id = proximoId++;
+      pendentes[id] = { resolve, reject };
+      window.parent.postMessage({ __ponteClaude: true, tipo: 'chamada', id, acao, payload }, '*');
+    });
+  }
+  window.claude = {
+    use: async (nome) => {
+      if (nome !== 'downloads') return null;
+      return { save: (req) => chamarHub('downloads.save', req) };
+    }
+  };
+})();
+
+async function salvarArquivo(filename, blob){
+  if (typeof window.claude !== 'undefined' && typeof window.claude.use === 'function'){
+    try{
+      const downloads = await window.claude.use('downloads');
+      if (downloads){ await downloads.save({ filename, data: blob }); return true; }
+    }catch(err){
+      showToast('Não foi possível salvar o arquivo (' + (err && (err.code || err.message) || 'erro') + ').', 'err');
+      return false;
+    }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  return true;
+}
+
+function showToast(msg, type){
+  const host = document.getElementById('toast-host');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type === 'err' ? ' toast-err' : type === 'ok' ? ' toast-ok' : '');
+  el.textContent = msg;
+  host.appendChild(el);
+  setTimeout(() => el.remove(), 5000);
+}
+
+// ---------- utilidades ----------
+function normalize(str){
+  return (str || '').toString()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function inputNum(id){
+  const v = parseFloat(document.getElementById(id).value);
+  return isNaN(v) ? 0 : v;
+}
+
+function toNumber(v){
+  if (v === null || v === undefined || v === '') return 0;
+  if (typeof v === 'number') return v;
+  const n = parseFloat(String(v).replace(/\./g,'').replace(',', '.'));
+  return isNaN(n) ? 0 : n;
+}
+
+function round2(v){
+  return Math.round((v + Number.EPSILON) * 100) / 100;
+}
+
+function fmtBRL(v){
+  return (v || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+}
+
+function uid(){
+  return 'id' + Math.random().toString(36).slice(2, 10);
+}
+
+function sheetToMatrix(ws){
+  return XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true});
+}
+
+// ---------- leitura de CSV (balancetes exportados direto do ERP) ----------
+// Muitos ERPs exportam o balancete analítico como .csv separado por ";" (porque
+// "," já é o separador decimal), em codificação ISO-8859-1/Windows-1252 (acentos
+// quebram se lido como UTF-8). As funções abaixo tratam os dois casos.
+function decodeBytesToText(buffer){
+  try{
+    return new TextDecoder('utf-8', {fatal:true}).decode(buffer);
+  }catch(e){
+    return new TextDecoder('iso-8859-1').decode(buffer);
+  }
+}
+
+function parseCsvLine(line, delim){
+  const result = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i=0;i<line.length;i++){
+    const ch = line[i];
+    if (inQuotes){
+      if (ch === '"'){
+        if (line[i+1] === '"'){ cur += '"'; i++; }
+        else inQuotes = false;
+      } else cur += ch;
+    } else {
+      if (ch === '"') inQuotes = true;
+      else if (ch === delim){ result.push(cur); cur = ''; }
+      else cur += ch;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+function csvMatrixTemUmCabecalhoValido(matrix){
+  return matrix.some(row => row.some(cell => {
+    const v = normalize(cell);
+    return v === 'CLASSIF.' || v === 'CLASSIF' || v === 'NOME DA CONTA' || v === 'SALDO FINAL';
+  }));
+}
+
+function parseCsvToMatrix(text){
+  const lines = text.split(/\r\n|\n|\r/);
+  for (const delim of [';', ',']){
+    const matrix = lines.map(line => parseCsvLine(line, delim));
+    if (csvMatrixTemUmCabecalhoValido(matrix)) return matrix;
+  }
+  // nenhum dos dois bateu com o cabeçalho esperado — devolve o resultado com ";"
+  // (delimitador mais comum nesse tipo de exportação) para o parser de balancete
+  // tentar mesmo assim e, se falhar, emitir o aviso de "não encontrei as colunas".
+  return lines.map(line => parseCsvLine(line, ';'));
+}
+
+function findSheetByName(wb, wanted){
+  const target = normalize(wanted);
+  let name = wb.SheetNames.find(n => normalize(n) === target);
+  if (!name) name = wb.SheetNames.find(n => normalize(n).includes(target));
+  return name ? wb.Sheets[name] : null;
+}
+
+// ---------- configuração (grupos) ----------
+const CONFIG_KEY = 'zerador-transitoria-config-v1';
+
+function configPadrao(){
+  return {
+    grupos: [
+      {
+        id: uid(),
+        nome: 'Caixas e Portadores',
+        contas: [
+          {id: uid(), codigo:'1.1.1.01.0001', descricao:'CAIXA MATRIZ', regra:'zerar', valorFixo:0},
+          {id: uid(), codigo:'1.1.1.01.0003', descricao:'CAIXA - PORTADOR 115', regra:'relatorio', valorFixo:0},
+          {id: uid(), codigo:'1.1.1.01.0004', descricao:'PENDENCIA', regra:'zerar', valorFixo:0},
+          {id: uid(), codigo:'1.1.1.01.0005', descricao:'CAIXA UBERLANDIA - PORTADOR 1', regra:'zerar', valorFixo:0},
+          {id: uid(), codigo:'1.1.1.01.0006', descricao:'CAIXA UBERABA - PORTADOR 2', regra:'zerar', valorFixo:0},
+          {id: uid(), codigo:'1.1.1.01.0007', descricao:'CAIXA PATOS DE MINAS - PORTADOR 4', regra:'zerar', valorFixo:0},
+          {id: uid(), codigo:'1.1.1.01.0008', descricao:'CAIXA ARAGUARI - PORTADOR 5', regra:'zerar', valorFixo:0},
+          {id: uid(), codigo:'1.1.1.01.0009', descricao:'CAIXA ARAXA - PORTADOR 6', regra:'zerar', valorFixo:0},
+          {id: uid(), codigo:'1.1.1.01.0011', descricao:'COFRE- CARTAO - PORTADOR 17', regra:'zerar', valorFixo:0},
+          {id: uid(), codigo:'1.1.1.01.0014', descricao:'CAIXA MATRIZ - PORTADOR 511', regra:'zerar', valorFixo:0}
+        ],
+        etapas: [
+          {id: uid(), codigo:'1.1.1.01.0013', descricao:'COFRE DINHEIRO', historico:'', complemento:'TRANSFERENCIA PARA COFRE DINHEIRO'},
+          {id: uid(), codigo:'1.1.2.01.0003', descricao:'(-) DUPLICATAS DESCONTADAS', historico:'', complemento:'TRANSFERENCIA COFRE PARA DUPLICATAS DESCONTADAS'}
+        ]
+      }
+    ]
+  };
+}
+
+let config = configPadrao();
+
+function loadConfig(){
+  try{
+    const raw = localStorage.getItem(CONFIG_KEY);
+    if (raw){
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.grupos)) config = parsed;
+    }
+  }catch(e){ /* localStorage indisponível - segue com o padrão em memória */ }
+}
+
+function saveConfig(){
+  try{
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+    document.getElementById('hint-config-saved').className = 'hint ok';
+    document.getElementById('hint-config-saved').textContent = 'Configuração salva neste navegador.';
+  }catch(e){
+    document.getElementById('hint-config-saved').className = 'hint warn';
+    document.getElementById('hint-config-saved').textContent = 'Não foi possível salvar automaticamente neste navegador — use "Exportar configuração" para não perder o que fez.';
+  }
+}
+
+const REGRA_LABELS = {
+  zerar: 'Zerar (saldo final = 0)',
+  relatorio: 'Bater com relatório (valor ao lado)',
+  saldo_especifico: 'Saldo específico (valor ao lado)'
+};
+
+function renderGrupos(){
+  const container = document.getElementById('grupos-container');
+  container.innerHTML = '';
+
+  config.grupos.forEach((grupo, gi) => {
+    const card = document.createElement('div');
+    card.className = 'grupo-card';
+
+    const head = document.createElement('div');
+    head.className = 'grupo-head';
+    head.innerHTML =
+      '<input type="text" data-grupo="' + grupo.id + '" data-field="nome" value="' + escapeAttr(grupo.nome) + '" placeholder="Nome do grupo">' +
+      '<button class="btn-ghost btn-remover-grupo" data-grupo="' + grupo.id + '">Remover grupo</button>';
+    card.appendChild(head);
+
+    // tabela de contas
+    const contasTitle = document.createElement('div');
+    contasTitle.className = 'subtable-title';
+    contasTitle.textContent = 'Contas do grupo';
+    card.appendChild(contasTitle);
+
+    const tableWrap = document.createElement('div');
+    tableWrap.className = 'table-wrap';
+    const table = document.createElement('table');
+    table.innerHTML =
+      '<thead><tr><th>Código contábil</th><th>Descrição</th><th>Regra</th><th>Valor alvo (relatório / saldo específico)</th><th></th></tr></thead>';
+    const tbody = document.createElement('tbody');
+    grupo.contas.forEach(conta => {
+      const tr = document.createElement('tr');
+      const precisaValor = conta.regra === 'saldo_especifico' || conta.regra === 'relatorio';
+      const saldoAtualTxt = (balancete && conta.codigo) ? (() => {
+        const s = saldoDaConta(conta.codigo);
+        return s === null ? '' : '<span class="hint mono">Balancete: ' + fmtBRL(s) + '</span>';
+      })() : '';
+      tr.innerHTML =
+        '<td><input type="text" class="mono" data-grupo="' + grupo.id + '" data-conta="' + conta.id + '" data-field="codigo" value="' + escapeAttr(conta.codigo) + '" placeholder="0.0.0.00.0000"></td>' +
+        '<td><input type="text" data-grupo="' + grupo.id + '" data-conta="' + conta.id + '" data-field="descricao" value="' + escapeAttr(conta.descricao) + '" placeholder="Descrição"></td>' +
+        '<td>' + buildRegraSelect(grupo.id, conta.id, conta.regra) + '</td>' +
+        '<td><input type="number" step="0.01" data-grupo="' + grupo.id + '" data-conta="' + conta.id + '" data-field="valorFixo" value="' + (conta.valorFixo || 0) + '" ' + (precisaValor ? '' : 'disabled') + '>' + saldoAtualTxt + '</td>' +
+        '<td><button class="btn-icon btn-remover-conta" data-grupo="' + grupo.id + '" data-conta="' + conta.id + '" title="Remover conta">✕</button></td>';
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    card.appendChild(tableWrap);
+
+    const btnAddConta = document.createElement('button');
+    btnAddConta.className = 'btn-secondary btn-add-conta';
+    btnAddConta.style.marginTop = '10px';
+    btnAddConta.dataset.grupo = grupo.id;
+    btnAddConta.textContent = '+ Conta';
+    card.appendChild(btnAddConta);
+
+    // cadeia de destino (etapas)
+    const etapasTitle = document.createElement('div');
+    etapasTitle.className = 'subtable-title';
+    etapasTitle.textContent = 'Cadeia de destino (para onde o saldo é transferido, em ordem)';
+    card.appendChild(etapasTitle);
+
+    const chain = document.createElement('div');
+    chain.className = 'etapa-chain';
+    chain.innerHTML = '<span class="tag tag-credito">Contas do grupo</span>';
+    grupo.etapas.forEach((etapa, ei) => {
+      chain.innerHTML += '<span class="arrow-step">→</span><span class="tag tag-debito">' + (ei+1) + '. ' + (etapa.descricao || etapa.codigo || 'etapa') + '</span>';
+    });
+    card.appendChild(chain);
+
+    const etapasWrap = document.createElement('div');
+    etapasWrap.className = 'table-wrap';
+    const etapasTable = document.createElement('table');
+    etapasTable.innerHTML = '<thead><tr><th>#</th><th>Conta destino</th><th>Descrição</th><th>Histórico</th><th>Complemento (texto do lançamento)</th><th></th></tr></thead>';
+    const etapasBody = document.createElement('tbody');
+    grupo.etapas.forEach((etapa, ei) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td class="mono">' + (ei+1) + '</td>' +
+        '<td><input type="text" class="mono" data-grupo="' + grupo.id + '" data-etapa="' + etapa.id + '" data-field="codigo" value="' + escapeAttr(etapa.codigo) + '" placeholder="0.0.0.00.0000"></td>' +
+        '<td><input type="text" data-grupo="' + grupo.id + '" data-etapa="' + etapa.id + '" data-field="descricao" value="' + escapeAttr(etapa.descricao) + '" placeholder="Descrição"></td>' +
+        '<td><input type="text" class="mono" data-grupo="' + grupo.id + '" data-etapa="' + etapa.id + '" data-field="historico" value="' + escapeAttr(etapa.historico) + '" placeholder="Ex: 250" style="max-width:90px;"></td>' +
+        '<td><input type="text" data-grupo="' + grupo.id + '" data-etapa="' + etapa.id + '" data-field="complemento" value="' + escapeAttr(etapa.complemento) + '" placeholder="Texto do histórico"></td>' +
+        '<td><button class="btn-icon btn-remover-etapa" data-grupo="' + grupo.id + '" data-etapa="' + etapa.id + '" title="Remover etapa">✕</button></td>';
+      etapasBody.appendChild(tr);
+    });
+    etapasTable.appendChild(etapasBody);
+    etapasWrap.appendChild(etapasTable);
+    card.appendChild(etapasWrap);
+
+    const btnAddEtapa = document.createElement('button');
+    btnAddEtapa.className = 'btn-secondary btn-add-etapa';
+    btnAddEtapa.style.marginTop = '10px';
+    btnAddEtapa.dataset.grupo = grupo.id;
+    btnAddEtapa.textContent = '+ Etapa da cadeia';
+    card.appendChild(btnAddEtapa);
+
+    container.appendChild(card);
+  });
+
+  wireGrupoEvents();
+}
+
+function buildRegraSelect(grupoId, contaId, atual){
+  let html = '<select data-grupo="' + grupoId + '" data-conta="' + contaId + '" data-field="regra">';
+  Object.keys(REGRA_LABELS).forEach(k => {
+    html += '<option value="' + k + '"' + (k === atual ? ' selected' : '') + '>' + REGRA_LABELS[k] + '</option>';
+  });
+  html += '</select>';
+  return html;
+}
+
+function escapeAttr(v){
+  return (v === undefined || v === null ? '' : String(v)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
+
+function findGrupo(id){ return config.grupos.find(g => g.id === id); }
+function findConta(grupo, id){ return grupo.contas.find(c => c.id === id); }
+function findEtapa(grupo, id){ return grupo.etapas.find(e => e.id === id); }
+
+function wireGrupoEvents(){
+  const container = document.getElementById('grupos-container');
+
+  container.querySelectorAll('input[data-field="nome"]').forEach(el => {
+    el.addEventListener('input', () => {
+      const g = findGrupo(el.dataset.grupo);
+      if (g){ g.nome = el.value; saveConfig(); atualizarEstadoGeral(); }
+    });
+  });
+
+  container.querySelectorAll('input[data-conta], select[data-conta]').forEach(el => {
+    el.addEventListener('input', () => onContaFieldChange(el));
+    el.addEventListener('change', () => onContaFieldChange(el));
+  });
+
+  container.querySelectorAll('input[data-etapa]').forEach(el => {
+    el.addEventListener('input', () => {
+      const g = findGrupo(el.dataset.grupo);
+      const et = g && findEtapa(g, el.dataset.etapa);
+      if (et){ et[el.dataset.field] = el.value; saveConfig(); renderGrupos(); atualizarEstadoGeral(); }
+    });
+  });
+
+  container.querySelectorAll('.btn-remover-grupo').forEach(btn => {
+    btn.addEventListener('click', () => {
+      config.grupos = config.grupos.filter(g => g.id !== btn.dataset.grupo);
+      saveConfig(); renderGrupos(); atualizarEstadoGeral();
+    });
+  });
+  container.querySelectorAll('.btn-remover-conta').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const g = findGrupo(btn.dataset.grupo);
+      if (g){ g.contas = g.contas.filter(c => c.id !== btn.dataset.conta); saveConfig(); renderGrupos(); atualizarEstadoGeral(); }
+    });
+  });
+  container.querySelectorAll('.btn-remover-etapa').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const g = findGrupo(btn.dataset.grupo);
+      if (g){ g.etapas = g.etapas.filter(e => e.id !== btn.dataset.etapa); saveConfig(); renderGrupos(); atualizarEstadoGeral(); }
+    });
+  });
+  container.querySelectorAll('.btn-add-conta').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const g = findGrupo(btn.dataset.grupo);
+      if (g){ g.contas.push({id:uid(), codigo:'', descricao:'', regra:'zerar', valorFixo:0}); saveConfig(); renderGrupos(); atualizarEstadoGeral(); }
+    });
+  });
+  container.querySelectorAll('.btn-add-etapa').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const g = findGrupo(btn.dataset.grupo);
+      if (g){ g.etapas.push({id:uid(), codigo:'', descricao:'', historico:'', complemento:''}); saveConfig(); renderGrupos(); atualizarEstadoGeral(); }
+    });
+  });
+}
+
+function onContaFieldChange(el){
+  const g = findGrupo(el.dataset.grupo);
+  const c = g && findConta(g, el.dataset.conta);
+  if (!c) return;
+  const field = el.dataset.field;
+  c[field] = field === 'valorFixo' ? (parseFloat(el.value) || 0) : el.value;
+  saveConfig();
+  if (field === 'regra') renderGrupos();
+  atualizarEstadoGeral();
+}
+
+document.getElementById('btn-novo-grupo').addEventListener('click', () => {
+  config.grupos.push({id: uid(), nome: 'Novo grupo', contas: [], etapas: []});
+  saveConfig(); renderGrupos(); atualizarEstadoGeral();
+});
+
+document.getElementById('btn-exportar-config').addEventListener('click', async () => {
+  const blob = new Blob([JSON.stringify(config, null, 2)], {type:'application/json'});
+  await salvarArquivo('configuracao-zerador-transitoria.json', blob);
+});
+
+document.getElementById('btn-importar-config').addEventListener('click', () => {
+  document.getElementById('file-config').click();
+});
+document.getElementById('file-config').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try{
+      const parsed = JSON.parse(ev.target.result);
+      if (!parsed || !Array.isArray(parsed.grupos)) throw new Error('formato inválido');
+      config = parsed;
+      saveConfig();
+      renderGrupos();
+      atualizarEstadoGeral();
+      showToast('Configuração importada com sucesso.', 'ok');
+    }catch(err){
+      showToast('Não consegui ler esse arquivo de configuração.', 'err');
+    }
+  };
+  reader.readAsText(file);
+});
+
+// "Adicionar grupo(s)": diferente de "Importar configuração" (que SUBSTITUI tudo),
+// isso ACRESCENTA os grupos do arquivo aos grupos já existentes — útil para receber
+// um grupo pronto (ex.: gerado numa conversa) sem perder o que já está configurado.
+document.getElementById('btn-adicionar-grupo-json').addEventListener('click', () => {
+  document.getElementById('file-adicionar-grupo').click();
+});
+document.getElementById('file-adicionar-grupo').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try{
+      const parsed = JSON.parse(ev.target.result);
+      const gruposNovos = Array.isArray(parsed) ? parsed : parsed.grupos;
+      if (!Array.isArray(gruposNovos) || !gruposNovos.length) throw new Error('formato inválido');
+      gruposNovos.forEach(g => {
+        g.id = uid();
+        (g.contas || []).forEach(c => { c.id = uid(); if (c.valorFixo === undefined) c.valorFixo = 0; if (!c.regra) c.regra = 'zerar'; });
+        (g.etapas || []).forEach(et => { et.id = uid(); if (!et.historico) et.historico = ''; if (!et.complemento) et.complemento = ''; });
+        if (!g.contas) g.contas = [];
+        if (!g.etapas) g.etapas = [];
+        config.grupos.push(g);
+      });
+      saveConfig();
+      renderGrupos();
+      atualizarEstadoGeral();
+      showToast(gruposNovos.length + ' grupo(s) adicionado(s) à configuração.', 'ok');
+    }catch(err){
+      showToast('Não consegui ler esse arquivo como grupo(s) de configuração.', 'err');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+// ---------- parsing do balancete ----------
+let balancete = null; // { porCodigo: { codigo: {descricao, saldo} } }
+
+function parseBalanceteCompleto(matrix){
+  let colClassif=-1, colNome=-1, colSaldoFinal=-1, colSaldoFinalDC=-1;
+  for (const row of matrix){
+    for (let c=0;c<row.length;c++){
+      const v = normalize(row[c]);
+      if (v === 'CLASSIF.' || v === 'CLASSIF') colClassif = c;
+      if (v === 'NOME DA CONTA') colNome = c;
+      if (v === 'SALDO FINAL') colSaldoFinal = c;
+    }
+    if (colClassif>=0 && colNome>=0 && colSaldoFinal>=0) break;
+  }
+  const out = { porCodigo:{} };
+  if (colClassif<0 || colSaldoFinal<0) return out;
+  colSaldoFinalDC = colSaldoFinal + 1;
+
+  for (const row of matrix){
+    const codigo = (row[colClassif] || '').toString().trim();
+    if (!codigo) continue;
+    const valorBruto = toNumber(row[colSaldoFinal]);
+    const natureza = normalize(row[colSaldoFinalDC]);
+    let saldo = Math.abs(valorBruto);
+    if (natureza === 'C') saldo = -saldo;
+    // se não há indicador D/C explícito, assume o sinal já vindo do valor bruto
+    if (natureza !== 'C' && natureza !== 'D') saldo = valorBruto;
+    out.porCodigo[codigo] = {
+      descricao: colNome >= 0 ? (row[colNome] || '').toString().trim() : '',
+      saldo: saldo
+    };
+  }
+  return out;
+}
+
+function saldoDaConta(codigo){
+  if (!balancete) return null;
+  const c = balancete.porCodigo[(codigo || '').trim()];
+  return c ? c.saldo : null;
+}
+
+// ---------- estado geral / cálculo ----------
+function lastDayOfMonth(ano, mes){
+  return new Date(ano, mes, 0);
+}
+
+function dateToExcelSerial(date){
+  const utcDate = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const excelEpoch = Date.UTC(1899, 11, 30);
+  return Math.round((utcDate - excelEpoch) / 86400000);
+}
+
+function setPill(id, cls){
+  const el = document.getElementById(id);
+  el.classList.remove('is-active','is-done');
+  if (cls) el.classList.add(cls);
+}
+
+function calcularLancamentos(){
+  const lancamentos = [];
+  const avisos = [];
+
+  config.grupos.forEach(grupo => {
+    if (!grupo.etapas.length){
+      if (grupo.contas.length) avisos.push({tipo:'err', texto:'O grupo "' + grupo.nome + '" tem contas mas nenhuma etapa de destino configurada.'});
+      return;
+    }
+
+    let contaAtualCodigo = null; // conta que está "recebendo" no momento (usada a partir da 2ª etapa)
+    let saldoAcumulado = 0; // efeito líquido já lançado sobre a conta que está recebendo
+
+    // 1ª leva: cada conta do grupo lança sua diferença para a etapa 1
+    const etapa1 = grupo.etapas[0];
+    grupo.contas.forEach(conta => {
+      if (!conta.codigo) { avisos.push({tipo:'warn', texto:'Uma conta do grupo "' + grupo.nome + '" está sem código contábil preenchido.'}); return; }
+      const saldoAtual = saldoDaConta(conta.codigo);
+      if (saldoAtual === null){
+        avisos.push({tipo:'warn', texto:'Conta ' + conta.codigo + ' (' + (conta.descricao||'') + ') não encontrada no balancete importado — considerada com saldo zero.'});
+      }
+      const saldo = saldoAtual === null ? 0 : saldoAtual;
+      // 'saldo_especifico' e 'relatorio' usam o mesmo campo (valor digitado na tabela de configuração);
+      // a diferença entre as duas regras é só o rótulo — a fonte do número é sempre o usuário.
+      const saldoAlvo = conta.regra === 'zerar' ? 0 : (conta.valorFixo || 0);
+
+      const diff = round2(saldo - saldoAlvo);
+      if (diff !== 0){
+        lancamentos.push(montarLancamento(grupo.nome, conta.codigo, etapa1.codigo, diff, etapa1.historico, resolverComplemento(etapa1.complemento, conta)));
+        saldoAcumulado = round2(saldoAcumulado + diff);
+      }
+    });
+
+    if (!etapa1.codigo || etapa1.codigo === 'PREENCHER'){
+      avisos.push({tipo:'err', texto:'A 1ª etapa do grupo "' + grupo.nome + '" está sem conta de destino definida.'});
+    }
+    contaAtualCodigo = etapa1.codigo;
+
+    // etapas seguintes: varre tudo que a conta atual acumulou (saldo do balancete + o que recebeu) para a próxima etapa
+    for (let i = 1; i < grupo.etapas.length; i++){
+      const proxima = grupo.etapas[i];
+      const saldoContaAtual = saldoDaConta(contaAtualCodigo);
+      const totalAtransferir = round2((saldoContaAtual === null ? 0 : saldoContaAtual) + saldoAcumulado);
+      if (!proxima.codigo || proxima.codigo === 'PREENCHER'){
+        avisos.push({tipo:'err', texto:'A etapa ' + (i+1) + ' do grupo "' + grupo.nome + '" está sem conta de destino definida.'});
+      }
+      if (totalAtransferir !== 0){
+        lancamentos.push(montarLancamento(grupo.nome, contaAtualCodigo, proxima.codigo, totalAtransferir, proxima.historico, proxima.complemento || ('TRANSFERENCIA ' + (grupo.etapas[i-1].descricao||'') + ' PARA ' + (proxima.descricao||''))));
+      }
+      contaAtualCodigo = proxima.codigo;
+      saldoAcumulado = totalAtransferir;
+    }
+  });
+
+  return {lancamentos, avisos};
+}
+
+function resolverComplemento(template, conta){
+  if (template && template.trim()) return template;
+  return 'TRANSFERENCIA ' + (conta.descricao || conta.codigo);
+}
+
+function montarLancamento(grupoNome, contaOrigem, contaDestino, diff, historico, complemento){
+  // diff = saldoAtual - saldoAlvo, convenção D positivo / C negativo.
+  // diff > 0: origem está com saldo devedor "a mais" -> credita origem, debita destino.
+  // diff < 0: origem está "faltando" saldo devedor (ou é credora) -> debita origem, credita destino.
+  const valor = Math.abs(diff);
+  const debito = diff > 0 ? contaDestino : contaOrigem;
+  const credito = diff > 0 ? contaOrigem : contaDestino;
+  return {
+    grupo: grupoNome,
+    debito, credito,
+    historico: historico || '',
+    complemento: complemento || '',
+    valor
+  };
+}
+
+let resultadoAtual = {lancamentos: [], avisos: []};
+
+function calcularEExibir(){
+  if (!balancete) return;
+  resultadoAtual = calcularLancamentos();
+  renderValidacao();
+  renderPreview();
+  setPill('pill-3', 'is-done');
+  setPill('pill-4', 'is-done');
+}
+
+function renderValidacao(){
+  const conteudo = document.getElementById('validacao-conteudo');
+  const avisos = resultadoAtual.avisos.slice();
+
+  if (!resultadoAtual.lancamentos.length && !avisos.length){
+    avisos.push({tipo:'warn', texto:'Nenhum lançamento foi gerado. Confira se há grupos, contas e etapas configurados.'});
+  }
+
+  if (!avisos.length){
+    conteudo.innerHTML = '<div class="empty-state"><div class="big">✅</div>Nenhuma pendência encontrada nas contas configuradas.</div>';
+    return;
+  }
+  const lista = document.createElement('div');
+  lista.className = 'check-list';
+  avisos.forEach(a => {
+    const div = document.createElement('div');
+    div.className = 'check-item ' + a.tipo;
+    div.textContent = a.texto;
+    lista.appendChild(div);
+  });
+  conteudo.innerHTML = '';
+  conteudo.appendChild(lista);
+}
+
+function renderPreview(){
+  const tbody = document.getElementById('tbody-preview');
+  tbody.innerHTML = '';
+  resultadoAtual.lancamentos.forEach(l => {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>' + escapeAttr(l.grupo) + '</td>' +
+      '<td><span class="tag tag-debito">LANÇAMENTO</span></td>' +
+      '<td class="mono">' + escapeAttr(l.debito) + '</td>' +
+      '<td class="mono">' + escapeAttr(l.credito) + '</td>' +
+      '<td class="mono">' + escapeAttr(l.historico) + '</td>' +
+      '<td>' + escapeAttr(l.complemento) + '</td>' +
+      '<td class="num mono">' + fmtBRL(l.valor) + '</td>';
+    tbody.appendChild(tr);
+  });
+
+  const periodoStr = document.getElementById('input-periodo').value;
+  let nomeArquivo = 'Lancamentos Zeragem Transitorias.xlsx';
+  if (periodoStr){
+    const [ano, mes] = periodoStr.split('-');
+    nomeArquivo = 'Lancamentos Zeragem Transitorias ' + mes + ano + '.xlsx';
+  }
+  document.getElementById('nome-arquivo-preview').textContent = nomeArquivo;
+  window.__nomeArquivoAtual = nomeArquivo;
+}
+
+function gerarWorkbook(){
+  const periodoStr = document.getElementById('input-periodo').value;
+  const [anoStr, mesStr] = periodoStr ? periodoStr.split('-') : [null, null];
+  const codigoEmpresa = inputNum('input-empresa') || 1;
+
+  let dataLancamento = new Date();
+  if (anoStr && mesStr) dataLancamento = lastDayOfMonth(parseInt(anoStr,10), parseInt(mesStr,10));
+  const serialData = dateToExcelSerial(dataLancamento);
+
+  const header = ['CÓDIGO EMPRESA*','DATA LANÇAMENTO*','CONTA DEBITO','CONTA CREDITO','CÓDIGO HISTÓRICO PADRÃO','COMPLEMENTO','VALOR LANÇAMENTO*','CENTRO CUSTO DEBITO','CENTRO CUSTO CREDITO','CÓDIGO AGRUPADOR'];
+  const rows = resultadoAtual.lancamentos.map(l => [
+    codigoEmpresa, null, l.debito, l.credito, l.historico, l.complemento, l.valor, null, null, null
+  ]);
+
+  const aoa = [header, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  for (let i = 0; i < rows.length; i++){
+    const cellRef = XLSX.utils.encode_cell({r: i+1, c: 1});
+    ws[cellRef] = {t:'n', v: serialData, z:'dd/mm/yyyy'};
+  }
+  if (!ws['!ref']) ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:rows.length, c:9}});
+  ws['!cols'] = [{wch:14},{wch:14},{wch:14},{wch:14},{wch:12},{wch:34},{wch:16},{wch:14},{wch:14},{wch:14}];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Planilha1');
+  return wb;
+}
+
+function atualizarEstadoGeral(){
+  const temGrupoValido = config.grupos.some(g => g.contas.length && g.etapas.length);
+  setPill('pill-1', temGrupoValido ? 'is-done' : 'is-active');
+  if (balancete){
+    desbloquearDemaisEtapas();
+    calcularEExibir();
+  }
+}
+
+function desbloquearDemaisEtapas(){
+  ['card-validacao','card-preview'].forEach(id => document.getElementById(id).removeAttribute('data-locked'));
+  setPill('pill-2', 'is-done');
+  setPill('pill-3', 'is-active');
+}
+
+// ---------- eventos de UI ----------
+function setupDropzone(dzId, inputId, onFile){
+  const dz = document.getElementById(dzId);
+  const input = document.getElementById(inputId);
+  dz.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => { if (input.files[0]) onFile(input.files[0]); });
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('is-dragover'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('is-dragover'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('is-dragover');
+    if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]);
+  });
+}
+
+function processarMatrizBalancete(matrix){
+  balancete = parseBalanceteCompleto(matrix);
+  if (!Object.keys(balancete.porCodigo).length){
+    showToast('Não consegui localizar as colunas "CLASSIF.", "NOME DA CONTA" e "SALDO FINAL" nesse arquivo.', 'err');
+    return;
+  }
+  desbloquearDemaisEtapas();
+  renderGrupos(); // repinta a tela de configuração já com o saldo de cada conta ao lado do campo de valor alvo
+  calcularEExibir();
+  showToast('Balancete importado com sucesso.', 'ok');
+}
+
+setupDropzone('dz-balancete', 'file-balancete', file => {
+  document.getElementById('chip-balancete').innerHTML = '<span class="file-chip">📄 ' + file.name + '</span>';
+  const isCsv = /\.csv$/i.test(file.name);
+  const reader = new FileReader();
+  reader.onload = e => {
+    if (isCsv){
+      const texto = decodeBytesToText(e.target.result);
+      processarMatrizBalancete(parseCsvToMatrix(texto));
+      return;
+    }
+    const data = new Uint8Array(e.target.result);
+    const wb = XLSX.read(data, {type:'array', cellDates:false});
+    const wsBalancete = findSheetByName(wb, 'Balancete') || wb.Sheets[wb.SheetNames[0]];
+    if (!wsBalancete){
+      showToast('Não encontrei nenhuma aba nesse arquivo.', 'err');
+      return;
+    }
+    processarMatrizBalancete(sheetToMatrix(wsBalancete));
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+['input-periodo','input-empresa'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => { if (balancete) calcularEExibir(); });
+});
+
+document.getElementById('btn-baixar').addEventListener('click', async () => {
+  if (!resultadoAtual.lancamentos.length) return;
+  const wb = gerarWorkbook();
+  const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+  const blob = new Blob([wbout], {type:'application/octet-stream'});
+  const nomeArquivo = window.__nomeArquivoAtual || 'Lancamentos Zeragem Transitorias.xlsx';
+  const ok = await salvarArquivo(nomeArquivo, blob);
+  if (ok) showToast('Arquivo gerado: ' + nomeArquivo, 'ok');
+});
+
+// ---------- inicialização ----------
+loadConfig();
+renderGrupos();
+setPill('pill-1', 'is-active');
+atualizarEstadoGeral();
+</script>
+</body>
+</html>

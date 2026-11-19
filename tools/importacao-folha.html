@@ -1,0 +1,975 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="hub-nome" content="Importação Folha de Pagamento">
+<meta name="hub-descricao" content="Lê o Resumo Folha (.xlsx) por empresa, cruza cada evento com a base de contas e gera a planilha de lançamento contábil pronta para importar.">
+<meta name="hub-icone" content="📄">
+<meta name="hub-categoria" content="Folha de Pagamento">
+<title>Importação Folha — Beija Flor</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#f5f7f5;
+  --surface:#ffffff;
+  --surface-alt:#eef2ef;
+  --ink:#182420;
+  --muted:#5c6f68;
+  --border:#dbe3de;
+  --accent:#0f5d52;
+  --accent-strong:#0b453d;
+  --accent-ink:#f4fbf9;
+  --accent-soft:#e0efec;
+  --danger:#b3261e;
+  --danger-soft:#fbe9e6;
+  --warning:#8a5a00;
+  --warning-soft:#fff1d9;
+  --success:#1e7d4a;
+  --success-soft:#e5f4ea;
+  --tag-debito-bg:#fff1d9;
+  --tag-debito-ink:#8a5a00;
+  --tag-credito-bg:#e3edfb;
+  --tag-credito-ink:#1b4f8a;
+  --shadow: 0 1px 2px rgba(15,30,25,.06), 0 8px 24px -12px rgba(15,30,25,.22);
+  --radius:14px;
+  --font-display:'IBM Plex Sans Condensed', 'IBM Plex Sans', sans-serif;
+  --font-body:'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono:'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9;
+    --muted:#94a6a0; --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6;
+    --accent-ink:#08201b; --accent-soft:#1a332d; --danger:#ff9d93; --danger-soft:#3a201d;
+    --warning:#ffcf70; --warning-soft:#3a2c12; --success:#8fe3ac; --success-soft:#173425;
+    --tag-debito-bg:#3a2c12; --tag-debito-ink:#ffcf70; --tag-credito-bg:#182b3d; --tag-credito-ink:#8fc2ff;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9;
+  --muted:#94a6a0; --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6;
+  --accent-ink:#08201b; --accent-soft:#1a332d; --danger:#ff9d93; --danger-soft:#3a201d;
+  --warning:#ffcf70; --warning-soft:#3a2c12; --success:#8fe3ac; --success-soft:#173425;
+  --tag-debito-bg:#3a2c12; --tag-debito-ink:#ffcf70; --tag-credito-bg:#182b3d; --tag-credito-ink:#8fc2ff;
+  --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+}
+
+*{box-sizing:border-box;}
+body{
+  font-family:var(--font-body);
+  background:var(--bg); color:var(--ink); margin:0; padding-inline:16px; padding-block:20px 60px;
+}
+h1,h2,h3{ font-family:var(--font-display); font-weight:700; text-wrap:balance; margin:0; }
+.app-shell{max-width:1180px;margin:0 auto;}
+
+.topbar{
+  position:sticky; top:env(safe-area-inset-top,0px); z-index:30;
+  background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--border); margin:-20px -16px 28px; padding:16px;
+}
+.topbar-inner{ max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:14px 24px; justify-content:space-between; }
+.brand{ display:flex; align-items:center; gap:12px; }
+.brand-mark{
+  width:38px; height:38px; border-radius:10px; background:var(--accent); color:var(--accent-ink);
+  display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-weight:700; font-size:15px;
+  box-shadow:var(--shadow); flex:none;
+}
+.brand h1{ font-size:19px; letter-spacing:.2px; }
+.brand p{ margin:2px 0 0; font-size:12.5px; color:var(--muted); max-width:560px; }
+
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px 24px;margin-bottom:18px;box-shadow:var(--shadow);}
+.card h2{font-family:var(--font-display);font-size:17px;margin:0 0 12px;}
+.card h3{font-size:12.5px;margin:16px 0 8px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:700;}
+.row{display:flex;gap:16px;flex-wrap:wrap;}
+.stat{flex:1;min-width:140px;background:var(--surface-alt);border:1px solid var(--border);border-radius:10px;padding:12px 16px;}
+.stat .n{font-family:var(--font-mono);font-size:20px;font-weight:600;}
+.stat .l{font-size:11.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-top:2px;}
+
+button{ font-family:var(--font-body); cursor:pointer; border:none; border-radius:9px; font-weight:600; font-size:13.5px; }
+button:not(.secondary){ background:var(--accent); color:var(--accent-ink); padding:10px 18px; box-shadow:var(--shadow); }
+button:not(.secondary):hover{ background:var(--accent-strong); }
+button.secondary{ background:var(--surface-alt); color:var(--ink); border:1px solid var(--border); padding:9px 16px; box-shadow:none; }
+button.secondary:hover{ background:var(--surface); }
+button:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;}
+
+input[type=file]{font-size:13px;color:var(--ink);}
+input[type=text], input[type=date], select{
+  font-family:var(--font-body); font-size:13.5px; padding:9px 10px; border:1px solid var(--border); border-radius:8px; width:100%;
+  background:var(--surface); color:var(--ink);
+}
+input:focus, select:focus, button:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+
+table{width:100%;border-collapse:collapse;font-size:12.5px;}
+th,td{border-bottom:1px solid var(--border);padding:8px 10px;text-align:left;white-space:nowrap;}
+th{background:var(--surface-alt);position:sticky;top:0;font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);}
+.scroll{max-height:420px;overflow:auto;border:1px solid var(--border);border-radius:10px;}
+.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--font-mono);}
+
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;font-family:var(--font-mono);}
+.pill.provento{background:var(--success-soft);color:var(--success);}
+.pill.desconto{background:var(--danger-soft);color:var(--danger);}
+.pill.especial{background:var(--tag-credito-bg);color:var(--tag-credito-ink);}
+.pill.vantagem{background:var(--accent-soft);color:var(--accent-strong);}
+
+.warn-box{background:var(--warning-soft);color:var(--warning);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:12px;}
+.ok-box{background:var(--success-soft);color:var(--success);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:12px;}
+
+details summary{cursor:pointer;font-weight:600;font-size:14px;margin-bottom:8px;font-family:var(--font-display);}
+.actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
+.hidden{display:none !important;}
+.small{font-size:12px;color:var(--muted);}
+.tag-del{color:var(--danger);cursor:pointer;font-size:12px;font-weight:600;}
+.footline{font-size:11px;color:var(--muted);margin-top:6px;}
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-mark">IF</div>
+        <div>
+          <h1>Importação Folha — Beija Flor</h1>
+          <p>Envie o "Resumo Folha" (relatório do sistema de folha) e a ferramenta gera a planilha de importação pronta para conferência e download.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Empresa ativa</h2>
+    <div class="row" style="align-items:flex-end;">
+      <div style="flex:2;min-width:240px;">
+        <label class="small">Perfil (empresa)</label><br>
+        <select id="profileSelect"></select>
+      </div>
+      <div style="flex:1;min-width:120px;">
+        <label class="small">Código empresa (contábil)</label><br>
+        <input type="text" id="codigoEmpresaInput">
+      </div>
+      <div style="flex:0 0 auto;display:flex;gap:8px;">
+        <button class="secondary" id="btnNovaEmpresa">+ Nova empresa</button>
+        <button class="secondary" id="btnRenomearEmpresa">Renomear</button>
+        <button class="secondary" id="btnExcluirEmpresa">Excluir</button>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <label class="small" style="display:flex;align-items:center;gap:6px;">
+        <input type="checkbox" id="autoDetectCheckbox" checked style="width:auto;">
+        Detectar a empresa automaticamente pelo nome no Resumo Folha
+      </label>
+    </div>
+    <div id="empresaMsg" class="small" style="margin-top:6px;"></div>
+  </div>
+
+  <div class="card">
+    <h2>1. Enviar Resumo Folha (.xlsx)</h2>
+    <input type="file" id="fileInput" accept=".xlsx,.xls">
+    <div id="parseMsg" class="small" style="margin-top:8px;"></div>
+  </div>
+
+  <div id="summarySection" class="hidden">
+    <div class="card">
+      <h2>Resumo</h2>
+      <div class="row" style="margin-bottom:10px;">
+        <div>
+          <label class="small">Competência (data de lançamento)</label><br>
+          <input type="date" id="dataLancamento" style="width:180px;">
+        </div>
+      </div>
+      <div class="row">
+        <div class="stat"><div class="n" id="statProventos">-</div><div class="l">Total proventos</div></div>
+        <div class="stat"><div class="n" id="statDescontos">-</div><div class="l">Total descontos</div></div>
+        <div class="stat"><div class="n" id="statReconhecidos">-</div><div class="l">Eventos reconhecidos</div></div>
+        <div class="stat"><div class="n" id="statPendencias">-</div><div class="l">Pendências</div></div>
+        <div class="stat"><div class="n" id="statIgnorados">-</div><div class="l">Eventos ignorados</div></div>
+      </div>
+    </div>
+
+    <div id="pendenciasCard" class="card hidden">
+      <h2>⚠ Pendências — eventos não reconhecidos</h2>
+      <div class="small" style="margin-bottom:10px;">Estes eventos apareceram no Resumo Folha mas não estão na base de contas conhecida. Escolha o que fazer com cada um antes de gerar a planilha.</div>
+      <div class="scroll">
+        <table id="pendenciasTable">
+          <thead><tr><th>Evento</th><th>Origem</th><th class="num">Valor</th><th>Ação</th><th>Conta necessária</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="actions">
+        <button id="btnAplicarPendencias">Aplicar pendências e recalcular</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Planilha de importação (pré-visualização)</h2>
+      <div class="scroll">
+        <table id="previewTable">
+          <thead>
+            <tr>
+              <th>CÓDIGO EMPRESA*</th><th>DATA LANÇAMENTO*</th><th>CONTA DEBITO</th><th>CONTA CREDITO</th>
+              <th>CÓD. HIST.</th><th>COMPLEMENTO</th><th class="num">VALOR*</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="footline" id="checkSoma"></div>
+      <div class="actions">
+        <button id="btnDownload">Baixar planilha de importação (.xlsx)</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <details>
+        <summary>Eventos ignorados na importação (não contabilizados)</summary>
+        <div class="small" style="margin:8px 0;">Estes eventos nunca geram lançamento. Você pode adicionar ou remover itens desta lista.</div>
+        <div id="ignoreList" class="row" style="gap:6px;"></div>
+        <div class="row" style="margin-top:10px;">
+          <input type="text" id="newIgnoreInput" placeholder="Nome exato do evento a ignorar" style="max-width:320px;">
+          <button class="secondary" id="btnAddIgnore">Adicionar</button>
+        </div>
+      </details>
+    </div>
+
+    <div class="card">
+      <details id="baseDetails">
+        <summary>Base de eventos conhecidos (avançado)</summary>
+        <div class="small" style="margin:8px 0;">Mapeamento evento → conta contábil usado para gerar os lançamentos automaticamente. Edite se alguma conta mudar.</div>
+        <input type="text" id="baseSearch" placeholder="Buscar evento..." style="max-width:320px;margin-bottom:10px;">
+        <div class="scroll" style="max-height:320px;">
+          <table id="baseTable">
+            <thead><tr><th>Evento</th><th>Tipo</th><th>Conta débito</th><th>Conta crédito</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div class="actions">
+          <button class="secondary" id="btnAddEvent">+ Adicionar evento</button>
+          <button class="secondary" id="btnExportMapping">Exportar base (JSON)</button>
+          <button class="secondary" id="btnImportMapping">Importar base (JSON)</button>
+          <button class="secondary" id="btnResetMapping">Restaurar base padrão</button>
+          <input type="file" id="importMappingFile" accept=".json" class="hidden">
+        </div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<script>
+// -----------------------------------------------------------------
+// PONTE DE CAPACIDADES: quando esta ferramenta roda dentro de um
+// iframe do hub, repassa window.claude.use(...) para a janela pai.
+// Fora do hub (arquivo aberto sozinho), não faz nada e usa o suporte
+// nativo normalmente.
+// -----------------------------------------------------------------
+(function(){
+  if (window.top === window.self) return;
+  if (window.claude && window.claude.use) return;
+  let proximoId = 1;
+  const pendentes = {};
+  window.addEventListener('message', (ev) => {
+    const msg = ev.data;
+    if (!msg || msg.__ponteClaude !== true || msg.tipo !== 'resposta') return;
+    const p = pendentes[msg.id];
+    if (!p) return;
+    delete pendentes[msg.id];
+    if (msg.erro) p.reject(msg.erro); else p.resolve(msg.resultado);
+  });
+  function chamarHub(acao, payload){
+    return new Promise((resolve, reject) => {
+      const id = proximoId++;
+      pendentes[id] = { resolve, reject };
+      window.parent.postMessage({ __ponteClaude: true, tipo: 'chamada', id, acao, payload }, '*');
+    });
+  }
+  window.claude = {
+    use: async (nome) => {
+      if (nome !== 'downloads') return null;
+      return { save: (req) => chamarHub('downloads.save', req) };
+    }
+  };
+})();
+
+// Salva um Blob usando a capacidade de downloads do Claude quando disponível
+// (dentro do hub, via ponte, ou nativamente fora dele); cai para o método
+// tradicional de link <a download> só como último recurso.
+async function salvarArquivo(filename, blob){
+  if (typeof window.claude !== 'undefined' && typeof window.claude.use === 'function'){
+    try{
+      const downloads = await window.claude.use('downloads');
+      if (downloads){
+        await downloads.save({ filename, data: blob });
+        return true;
+      }
+    }catch(err){
+      alert('Não foi possível salvar o arquivo (' + (err && (err.code || err.message) || 'erro') + ').');
+      return false;
+    }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  return true;
+}
+
+/* =========================================================================
+   BASE DE DADOS PADRÃO (extraída da planilha de importação de referência)
+   tipo 'provento'  -> credito fixo 2.1.1.01.0001, debito = conta
+   tipo 'desconto'  -> debito fixo 2.1.1.01.0001, credito = conta
+   tipo 'especial'  -> debito e credito fixos (não usam 2.1.1.01.0001)
+   ========================================================================= */
+const CONTA_FIXA = "2.1.1.01.0001";
+const CODIGO_HISTORICO = 182;
+const DEFAULT_PROFILE_NAME = "BEIJA FLOR COMERCIO DE TINTAS LTDA";
+
+const DEFAULT_MAPPING = {"Horas Normais":{"tipo":"provento","conta":"3.1.3.01.0001"},"Horas Férias Diurnas":{"tipo":"provento","conta":"2.1.5.01.0004"},"DSR s/Comissao":{"tipo":"provento","conta":"3.1.3.01.0001"},"Horas Extras c/ 100%":{"tipo":"provento","conta":"3.1.3.01.0003"},"Horas Extras c/ 90%":{"tipo":"provento","conta":"3.1.3.01.0003"},"Horas Extras c/ 75%":{"tipo":"provento","conta":"3.1.3.01.0003"},"Horas Extras c/90% Comis.":{"tipo":"provento","conta":"3.1.3.01.0003"},"DSR H.E Sobre Comissao":{"tipo":"provento","conta":"3.1.3.01.0001"},"Horas Extras 80% Comissão":{"tipo":"provento","conta":"3.1.3.01.0003"},"Horas Extras c/100% Comis":{"tipo":"provento","conta":"3.1.3.01.0003"},"Hs Atestado 15 Prim.Dias":{"tipo":"provento","conta":"3.1.3.01.0001"},"Adicional Noturno 20%":{"tipo":"provento","conta":"3.1.3.01.0001"},"Insalubridade":{"tipo":"provento","conta":"3.1.3.01.0001"},"Periculosidade":{"tipo":"provento","conta":"3.1.3.01.0001"},"DSR Reflexo H.Extras":{"tipo":"provento","conta":"3.1.3.01.0003"},"Insalubridade Férias":{"tipo":"provento","conta":"2.1.5.01.0004"},"Adic.Noturno Férias":{"tipo":"provento","conta":"2.1.5.01.0004"},"Premio Meta Mensal":{"tipo":"provento","conta":"3.1.3.01.0001"},"Aviso Prévio Indenizado":{"tipo":"provento","conta":"3.1.3.01.0002"},"Média Horas Extras A.P.I":{"tipo":"provento","conta":"3.1.3.01.0002"},"Média Val.Variáveis A.P.I":{"tipo":"provento","conta":"3.1.3.01.0002"},"Saldo de Salário":{"tipo":"provento","conta":"3.1.3.01.0001"},"Média Horas Extras Férias":{"tipo":"provento","conta":"2.1.5.01.0004"},"Média Variáveis Férias":{"tipo":"provento","conta":"2.1.5.01.0004"},"1/3 Férias":{"tipo":"provento","conta":"2.1.5.01.0004"},"Diferença de Férias":{"tipo":"provento","conta":"3.1.3.01.0022"},"Multa Dobro Férias":{"tipo":"provento","conta":"3.1.3.01.0022"},"Abono Pecuniário Férias":{"tipo":"provento","conta":"2.1.5.01.0004"},"Média H.Extras Abono Pec.":{"tipo":"provento","conta":"2.1.5.01.0004"},"Média V.Variáv.Abono Pec.":{"tipo":"provento","conta":"2.1.5.01.0004"},"1/3 Abono Pecuniário Fér":{"tipo":"provento","conta":"2.1.5.01.0004"},"Diferença de Abono":{"tipo":"provento","conta":"2.1.5.01.0004"},"Multa Dobro Abono Pec.":{"tipo":"provento","conta":"3.1.3.01.0022"},"Férias Vencidas Rescisão":{"tipo":"provento","conta":"2.1.5.01.0004"},"Férias Proporc.Rescisão":{"tipo":"provento","conta":"2.1.5.01.0004"},"Média H.Extra Férias Resc":{"tipo":"provento","conta":"2.1.5.01.0004"},"Média V.Variáv.Férias Res":{"tipo":"provento","conta":"2.1.5.01.0004"},"Insalubridade Férias Resc":{"tipo":"provento","conta":"2.1.5.01.0004"},"1/3 Férias Rescisão":{"tipo":"provento","conta":"2.1.5.01.0004"},"Multa Dobro Férias Resc.":{"tipo":"provento","conta":"2.1.5.01.0004"},"13o Salário Proporc.Resc":{"tipo":"provento","conta":"2.1.5.01.0001"},"Média H.Extras 13o Prop.":{"tipo":"provento","conta":"2.1.5.01.0001"},"Média Variáveis 13o Prop.":{"tipo":"provento","conta":"2.1.5.01.0001"},"Insalubridade 13o Proporc":{"tipo":"provento","conta":"3.1.3.01.0019"},"13o Indenizado Rescisão":{"tipo":"provento","conta":"2.1.5.01.0001"},"Média H.Extras 13o Inden":{"tipo":"provento","conta":"2.1.5.01.0001"},"Média Variáveis 13o Ind.":{"tipo":"provento","conta":"2.1.5.01.0001"},"Comissao Minima Garantida":{"tipo":"provento","conta":"3.1.3.01.0001"},"Comissões":{"tipo":"provento","conta":"3.1.3.01.0001"},"Devolução Desc.Indevido":{"tipo":"provento","conta":"3.1.3.01.0001"},"Ajuda Custo (SI) Ferias":{"tipo":"provento","conta":"3.1.3.01.0018"},"Premiação CCT":{"tipo":"provento","conta":"3.1.3.01.0001"},"Ajuda de Custo (SI)":{"tipo":"provento","conta":"3.1.3.01.0018"},"Horas Extras c/ 80%":{"tipo":"provento","conta":"3.1.3.01.0003"},"Premio (SI)":{"tipo":"provento","conta":"3.1.3.01.0004"},"Quebra de Caixa":{"tipo":"provento","conta":"3.1.3.01.0001"},"H.E Interjornada 50%":{"tipo":"provento","conta":"3.1.3.01.0003"},"H E Interjornada 50% Comi":{"tipo":"provento","conta":"3.1.3.01.0003"},"Horas Extras 75% Comiss":{"tipo":"provento","conta":"3.1.3.01.0003"},"DSR H.E s/Comissao":{"tipo":"provento","conta":"3.1.3.01.0003"},"Comissão Mensal":{"tipo":"provento","conta":"3.1.3.01.0001"},"DSR Adicional Noturno":{"tipo":"provento","conta":"3.1.3.01.0001"},"Premio Mensal(SI)":{"tipo":"provento","conta":"3.1.3.01.0004"},"Premio Mensal I (SI)":{"tipo":"provento","conta":"3.1.3.01.0004"},"Horas Extras c/90% Comis":{"tipo":"provento","conta":"3.1.3.01.0003"},"H.E.Interjorna 50% Comis.":{"tipo":"provento","conta":"3.1.3.01.0003"},"H.E.Interjorna 90% Comis.":{"tipo":"provento","conta":"3.1.3.01.0003"},"Diaria de Viagem":{"tipo":"provento","conta":"3.1.3.01.0001"},"Insal. Sobre Hs Atestado":{"tipo":"provento","conta":"3.1.3.01.0001"},"Estouro do Mês":{"tipo":"provento","conta":"3.1.3.01.0001"},"Salário Família":{"tipo":"provento","conta":"2.1.1.01.0007"},"Troco Férias":{"tipo":"provento","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 1/2":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 9/10":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 7/10":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 4/10":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 3/4":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 1/10":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 5/6":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 3/3":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 7/8":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 4/5":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 4/4":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 1/6":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc.Vale Parcelado 10/10":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 4/8":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Aviso Prévio Reavido":{"tipo":"desconto","conta":"3.1.3.01.0002"},"Média Horas Extras A.P.R":{"tipo":"desconto","conta":"3.1.3.01.0002"},"Insalubridade A.P.R":{"tipo":"desconto","conta":"3.1.3.01.0002"},"Troco Mês Anterior":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Estouro Mês Anterior":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Líquido Rescisão":{"tipo":"desconto","conta":"2.1.1.01.0005"},"Pensão Judicial":{"tipo":"desconto","conta":"2.1.1.01.0009"},"Pensão Judicial Férias":{"tipo":"desconto","conta":"2.1.1.01.0009"},"Desconto Adto Férias":{"tipo":"desconto","conta":"1.1.3.01.0001"},"Mensalidade Sindical":{"tipo":"desconto","conta":"2.1.1.01.0013"},"Desconto de Adiantamentos":{"tipo":"desconto","conta":"1.1.3.01.0002"},"Vale Transporte":{"tipo":"desconto","conta":"3.1.3.01.0011"},"INSS Férias":{"tipo":"desconto","conta":"2.1.1.01.0007"},"INSS":{"tipo":"desconto","conta":"2.1.1.01.0007"},"INSS 13o Salário":{"tipo":"desconto","conta":"2.1.1.01.0007"},"IRRF":{"tipo":"desconto","conta":"2.1.1.01.0010"},"IRRF Férias":{"tipo":"desconto","conta":"2.1.1.01.0010"},"Desc.Vale Parcelado 3/15":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desconto de Vales":{"tipo":"desconto","conta":"1.1.3.01.0002"},"Vale Parcelado":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desconto Unimed Titular":{"tipo":"desconto","conta":"3.1.3.01.0012"},"Desconto Unimed Depend.":{"tipo":"desconto","conta":"3.1.3.01.0012"},"Consulta Unimed":{"tipo":"desconto","conta":"3.1.3.01.0012"},"Desconto Notif.Judicial":{"tipo":"desconto","conta":"2.1.1.01.0015"},"Desconto Notif.Jud.Ferias":{"tipo":"desconto","conta":"2.1.1.01.0015"},"Desc. Vale Parcelado 5/5":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 5/10":{"tipo":"desconto","conta":"3.1.3.01.0011"},"Desc. Vale Parcelado 5/8":{"tipo":"desconto","conta":"3.1.3.01.0011"},"Desc. Vale Parcelado 3/8":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc.Vale Parcelado 10/12":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc eConsignado CLT":{"tipo":"desconto","conta":"2.1.1.01.0008"},"Desc eConsignado 2 CLT":{"tipo":"desconto","conta":"2.1.1.01.0008"},"Desc eConsignado 3 CLT":{"tipo":"desconto","conta":"2.1.1.01.0008"},"Desc eConsignado 4 CLT":{"tipo":"desconto","conta":"2.1.1.01.0008"},"Desc eConsignado 5 CLT":{"tipo":"desconto","conta":"2.1.1.01.0008"},"Desc eConsignado 6 CLT":{"tipo":"desconto","conta":"2.1.1.01.0008"},"Desc eConsignado 7 CLT":{"tipo":"desconto","conta":"2.1.1.01.0008"},"FGTS":{"tipo":"especial","debito":"3.1.3.01.0008","credito":"2.1.1.01.0008"},"FGTS 13o Sal.Depósito":{"tipo":"especial","debito":"2.1.5.01.0003","credito":"2.1.1.01.0008"},"FGTS 13o Salário":{"tipo":"especial","debito":"2.1.5.01.0003","credito":"2.1.1.01.0008"},"FGTS Rescisão Depositado":{"tipo":"especial","debito":"3.1.3.01.0008","credito":"2.1.1.01.0008"},"FGTS 40% Depositado":{"tipo":"especial","debito":"3.1.3.01.0008","credito":"2.1.1.01.0008"},"FGTS 13º Ind Dep":{"tipo":"especial","debito":"3.1.3.01.0008","credito":"2.1.1.01.0008"},"INSS Parte Empresa":{"tipo":"especial","debito":"3.1.3.01.0007","credito":"2.1.1.01.0007"},"INSS Terceiros":{"tipo":"especial","debito":"3.1.3.01.0007","credito":"2.1.1.01.0007"},"INSS Acid. Trabalho":{"tipo":"especial","debito":"3.1.3.01.0007","credito":"2.1.1.01.0007"}};
+
+const DEFAULT_IGNORE = ["Horas Faltas","Horas Faltas DSR","Horas Auxílio Doença","Total de Comissão + DSR","eConsignado CLT Ñ Desc","eConsignado 2 CLT Ñ Desc"];
+
+// Regras de "família" — eventos com numeração variável (ex: parcela X/Y, consignado nº N) que
+// ainda não têm ocorrência exata na base, mas seguem um padrão já conhecido. Servem apenas como
+// SUGESTÃO pré-preenchida na pendência — o usuário ainda precisa confirmar antes de contabilizar.
+const FAMILY_RULES = [
+  {regex: /^Desc\.?\s*Vale\s*Parcelado\s*\d+\/\d+$/i, tipo:'desconto', conta:'3.1.3.01.0001'},
+  {regex: /^Desc\s*eConsignado\s*(\d+\s*)?CLT$/i, tipo:'desconto', conta:'2.1.1.01.0008'}
+];
+function familySuggestion(nome){
+  for(const rule of FAMILY_RULES){
+    if(rule.regex.test(nome.trim())) return rule;
+  }
+  return null;
+}
+
+// Rótulos de seção/ruído que nunca são eventos financeiros
+const SECTION_LABELS = new Set(["Provento","Desconto","Vantagem","Outros","Outros Env.Desconto"]);
+
+/* =========================================================================
+   PERFIS DE EMPRESA — cada empresa tem sua própria base de eventos, lista de
+   ignorados e código empresa contábil. O perfil é identificado pelo NOME da
+   empresa (igual ao que aparece no Resumo Folha), permitindo detecção automática.
+   ========================================================================= */
+let profiles = {};
+let activeProfileName = null;
+let mapping = null;
+let ignoreList = null;
+let codigoEmpresaAtual = 1;
+let lastParse = null; // {rawEvents, gpsValues, periodEnd, companyName}
+let pendingResolutions = {}; // nome -> {acao, conta}
+
+function loadProfiles(){
+  try{
+    const s = localStorage.getItem('folhaImport_profiles');
+    if(s) profiles = JSON.parse(s);
+  }catch(e){}
+  if(!profiles || Object.keys(profiles).length === 0){
+    profiles = {};
+    profiles[DEFAULT_PROFILE_NAME] = {
+      codigoEmpresa: 1,
+      mapping: JSON.parse(JSON.stringify(DEFAULT_MAPPING)),
+      ignoreList: DEFAULT_IGNORE.slice()
+    };
+    saveProfiles();
+  }
+  let active = null;
+  try{ active = localStorage.getItem('folhaImport_activeProfile'); }catch(e){}
+  if(!active || !profiles[active]) active = Object.keys(profiles)[0];
+  activeProfileName = active;
+  applyActiveProfile();
+}
+function saveProfiles(){ try{ localStorage.setItem('folhaImport_profiles', JSON.stringify(profiles)); }catch(e){} }
+function saveActiveProfileName(){ try{ localStorage.setItem('folhaImport_activeProfile', activeProfileName); }catch(e){} }
+function applyActiveProfile(){
+  const p = profiles[activeProfileName];
+  mapping = p.mapping;
+  ignoreList = p.ignoreList;
+  codigoEmpresaAtual = p.codigoEmpresa;
+  saveActiveProfileName();
+}
+function saveMapping(){ profiles[activeProfileName].mapping = mapping; saveProfiles(); }
+function saveIgnore(){ profiles[activeProfileName].ignoreList = ignoreList; saveProfiles(); }
+function saveCodigoEmpresa(){ profiles[activeProfileName].codigoEmpresa = codigoEmpresaAtual; saveProfiles(); }
+
+function brToFloat(v){
+  if(v===null||v===undefined) return null;
+  if(typeof v === 'number') return v;
+  let s = String(v).trim();
+  if(s==='') return null;
+  s = s.replace(/\./g,'').replace(',', '.');
+  const n = parseFloat(s);
+  return isNaN(n) ? null : n;
+}
+function fmtMoney(n){
+  return n.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function cell(r,i){ return (r && r[i]!==undefined) ? r[i] : null; }
+
+/* =========================================================================
+   PARSER DO "RESUMO FOLHA"
+   ========================================================================= */
+function parseResumo(aoa){
+  const rawEvents = {}; // nome -> {total, origem: 'provento'|'desconto'|'vantagem'}
+  const ignoredHits = {}; // nome -> total (apenas informativo)
+  // O relatório imprime DUAS listas lado a lado em cada linha: a coluna da
+  // esquerda (índice 1/4) sempre traz proventos/vantagens, a da direita
+  // (índice 14/16) sempre traz descontos/outros — cada uma tem seu próprio
+  // rótulo de seção ("Provento"/"Vantagem" à esquerda, "Desconto"/"Outros"
+  // à direita) mas os dois lados AVANÇAM DE FORMA INDEPENDENTE: é comum uma
+  // linha trazer o rótulo "Vantagem" à esquerda e, na mesma linha, um evento
+  // de desconto de verdade à direita (ou vice-versa). Por isso não dá pra
+  // usar um único estado de "seção atual" pro par de colunas — cada lado
+  // precisa ser lido em toda linha ativa, ignorando apenas quando o próprio
+  // texto daquele lado é um rótulo de seção (via SECTION_LABELS).
+  let ativo = false; // estamos entre o cabeçalho "Cod." e a linha "Totais" da tabela de eventos
+  let periodEnd = null;
+  let empresaSectionIdx = -1;
+  let companyName = null;
+
+  // 1ª passada: localizar o índice da seção "Resumo dos Valores Totais da Empresa"
+  for(let i=0;i<aoa.length;i++){
+    const r = aoa[i];
+    if(cell(r,0) === 'Resumo dos Valores Totais da Empresa'){ empresaSectionIdx = i; }
+  }
+
+  function addEvent(nome, origem, valor){
+    nome = nome.trim();
+    if(!nome) return;
+    if(SECTION_LABELS.has(nome)) return;
+    if(valor === null) return;
+    if(ignoreList.includes(nome)){
+      ignoredHits[nome] = (ignoredHits[nome]||0) + valor;
+      return;
+    }
+    if(!rawEvents[nome]) rawEvents[nome] = {total:0, origem};
+    rawEvents[nome].total += valor;
+  }
+
+  for(let i=0;i<aoa.length;i++){
+    const r = aoa[i];
+    const c0 = cell(r,0), c1 = cell(r,1);
+
+    // ruído de rodapé / cabeçalho de página
+    if(typeof c0 === 'string' && c0.startsWith('FPRF')) continue;
+    if(typeof c0 === 'number' && typeof c1 === 'string' && c1.length > 10){ // linha "3212  BEIJA FLOR..."
+      if(!companyName) companyName = c1.trim();
+      continue;
+    }
+    if(c0 === 'Relação de Cálculo') continue;
+    if(c0 === 'Local:') continue;
+    if(c0 === 'Cod.'){ ativo = true; continue; }
+    if(c0 === 'Resumo dos Eventos dos Colaboradores') continue;
+    if(c0 === 'Resumo dos Valores Totais da Empresa') continue;
+    if(typeof c0 === 'string' && c0.startsWith('Legenda de incidência')) continue;
+
+    if(c0 === 'Período:'){
+      const end = cell(r,3);
+      if(end instanceof Date) periodEnd = end;
+      continue;
+    }
+
+    if(c0 === 'Totais' || c0 === 'Colaboradores' || c0 === 'Situação'){ ativo = false; continue; }
+
+    if(!ativo) continue;
+
+    // coluna da esquerda: sempre provento (inclui a faixa "Vantagem")
+    if(typeof c1 === 'string' && c1.trim() && !SECTION_LABELS.has(c1.trim())){
+      addEvent(c1, 'provento', brToFloat(cell(r,4)));
+    }
+    // coluna da direita: sempre desconto (inclui a faixa "Outros"), lida
+    // independente do que aconteceu na coluna da esquerda nesta mesma linha
+    const c14 = cell(r,14);
+    if(typeof c14 === 'string' && c14.trim() && !SECTION_LABELS.has(c14.trim())){
+      addEvent(c14, 'desconto', brToFloat(cell(r,16)));
+    }
+  }
+
+  // GPS: Parte Empresa / Terceiros / Acid. Trabalho — buscar após a seção "Resumo dos Valores Totais da Empresa"
+  // (se não existir essa seção, procura no arquivo inteiro)
+  const gpsLabels = {"Parte Empresa:":"INSS Parte Empresa","Terceiros:":"INSS Terceiros","Acid. Trabalho:":"INSS Acid. Trabalho"};
+  const startIdx = empresaSectionIdx >= 0 ? empresaSectionIdx : 0;
+  const gpsFound = {};
+  for(let i=startIdx;i<aoa.length;i++){
+    const r = aoa[i];
+    for(let j=0;j<r.length;j++){
+      const v = r[j];
+      if(typeof v === 'string' && gpsLabels[v.trim()] !== undefined){
+        const nome = gpsLabels[v.trim()];
+        if(gpsFound[nome] !== undefined) continue; // já pego (primeira ocorrência após o marcador)
+        // valor fica na(s) próxima(s) célula(s) não nulas da mesma linha
+        for(let k=j+1;k<r.length;k++){
+          if(r[k] !== null && r[k] !== undefined && r[k] !== ''){
+            const val = brToFloat(r[k]);
+            if(val !== null){ gpsFound[nome] = val; }
+            break;
+          }
+        }
+      }
+    }
+  }
+  for(const nome in gpsFound){
+    if(ignoreList.includes(nome)){ ignoredHits[nome] = (ignoredHits[nome]||0) + gpsFound[nome]; continue; }
+    if(!rawEvents[nome]) rawEvents[nome] = {total:0, origem:'especial'};
+    rawEvents[nome].total += gpsFound[nome];
+  }
+
+  return {rawEvents, ignoredHits, periodEnd, companyName};
+}
+
+function lastDayISO(d){
+  // sempre força o ÚLTIMO dia do mês de referência, independente do dia exato capturado
+  const last = new Date(d.getFullYear(), d.getMonth()+1, 0);
+  const yyyy = last.getFullYear();
+  const mm = String(last.getMonth()+1).padStart(2,'0');
+  const dd = String(last.getDate()).padStart(2,'0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+/* =========================================================================
+   MONTAGEM DAS LINHAS FINAIS + PENDÊNCIAS
+   ========================================================================= */
+function buildRows(rawEvents){
+  const finalRows = [];
+  const pendencias = [];
+  for(const nome in rawEvents){
+    const {total, origem} = rawEvents[nome];
+    const m = mapping[nome];
+    if(m){
+      let debito, credito;
+      if(m.tipo === 'especial'){ debito = m.debito; credito = m.credito; }
+      else if(m.tipo === 'provento'){ debito = m.conta; credito = CONTA_FIXA; }
+      else { debito = CONTA_FIXA; credito = m.conta; }
+      finalRows.push({nome, debito, credito, valor: Math.round(total*100)/100});
+    } else {
+      const sugestao = familySuggestion(nome);
+      pendencias.push({nome, origem, valor: Math.round(total*100)/100, sugestao: sugestao ? sugestao.conta : null});
+    }
+  }
+  finalRows.sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'));
+  pendencias.sort((a,b)=>a.nome.localeCompare(b.nome,'pt-BR'));
+  return {finalRows, pendencias};
+}
+
+/* =========================================================================
+   UI
+   ========================================================================= */
+const fileInput = document.getElementById('fileInput');
+const parseMsg = document.getElementById('parseMsg');
+const summarySection = document.getElementById('summarySection');
+const dataLancamentoInput = document.getElementById('dataLancamento');
+
+fileInput.addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  parseMsg.textContent = 'Lendo arquivo...';
+  const reader = new FileReader();
+  reader.onload = function(ev){
+    try{
+      const data = new Uint8Array(ev.target.result);
+      const wb = XLSX.read(data, {type:'array', cellDates:true, raw:true});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const aoa = XLSX.utils.sheet_to_json(ws, {header:1, raw:true, defval:null});
+      const parsed = parseResumo(aoa);
+      lastParse = parsed;
+      pendingResolutions = {};
+
+      handleCompanyDetection(parsed.companyName);
+
+      if(parsed.periodEnd){
+        dataLancamentoInput.value = lastDayISO(parsed.periodEnd);
+        parseMsg.textContent = '';
+      } else {
+        dataLancamentoInput.value = '';
+        parseMsg.textContent = 'Não foi possível detectar a competência automaticamente — informe a data de lançamento manualmente.';
+      }
+      renderAll();
+      summarySection.classList.remove('hidden');
+    }catch(err){
+      console.error(err);
+      parseMsg.textContent = 'Erro ao ler o arquivo: ' + err.message;
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+dataLancamentoInput.addEventListener('change', renderPreviewOnly);
+
+/* =========================================================================
+   GESTÃO DE PERFIS DE EMPRESA
+   ========================================================================= */
+function renderProfileSelect(){
+  const sel = document.getElementById('profileSelect');
+  sel.innerHTML = '';
+  Object.keys(profiles).sort((a,b)=>a.localeCompare(b,'pt-BR')).forEach(name=>{
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = `${name} (código ${profiles[name].codigoEmpresa})`;
+    if(name === activeProfileName) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  document.getElementById('codigoEmpresaInput').value = codigoEmpresaAtual;
+}
+
+function handleCompanyDetection(companyName){
+  const msgEl = document.getElementById('empresaMsg');
+  if(!companyName){ return; }
+  const autoDetect = document.getElementById('autoDetectCheckbox').checked;
+  if(!autoDetect){
+    msgEl.textContent = `Empresa identificada no arquivo: "${companyName}" (detecção automática desativada — usando o perfil ativo "${activeProfileName}").`;
+    return;
+  }
+  if(profiles[companyName]){
+    if(activeProfileName !== companyName){
+      activeProfileName = companyName;
+      applyActiveProfile();
+      renderProfileSelect();
+    }
+    msgEl.textContent = `Empresa detectada: "${companyName}" — perfil carregado (código empresa ${codigoEmpresaAtual}).`;
+  } else {
+    const criar = confirm(`Empresa "${companyName}" ainda não tem perfil cadastrado.\n\nCriar um novo perfil para ela agora?`);
+    if(!criar){
+      msgEl.textContent = `Atenção: "${companyName}" não corresponde ao perfil ativo ("${activeProfileName}"). Confira o código empresa e a base de eventos antes de gerar a planilha.`;
+      return;
+    }
+    const codigo = prompt(`Código empresa contábil para "${companyName}" (ex: 001, 101, 099):`, '');
+    if(codigo === null){ msgEl.textContent = `Perfil não criado para "${companyName}".`; return; }
+    const clonar = confirm('Começar esse perfil clonando a base de eventos/contas do perfil atual?\n\nOK = clonar\nCancelar = começar em branco');
+    profiles[companyName] = {
+      codigoEmpresa: codigo.trim(),
+      mapping: clonar ? JSON.parse(JSON.stringify(mapping)) : {},
+      ignoreList: clonar ? ignoreList.slice() : DEFAULT_IGNORE.slice()
+    };
+    saveProfiles();
+    activeProfileName = companyName;
+    applyActiveProfile();
+    renderProfileSelect();
+    renderBaseTable();
+    renderIgnoreList();
+    msgEl.textContent = `Novo perfil criado para "${companyName}" (código empresa ${codigoEmpresaAtual}).`;
+  }
+}
+
+document.getElementById('profileSelect').addEventListener('change', (e)=>{
+  activeProfileName = e.target.value;
+  applyActiveProfile();
+  renderProfileSelect();
+  renderBaseTable();
+  renderIgnoreList();
+  if(lastParse) renderAll();
+});
+
+document.getElementById('codigoEmpresaInput').addEventListener('change', (e)=>{
+  codigoEmpresaAtual = e.target.value.trim();
+  saveCodigoEmpresa();
+  if(lastParse) renderPreviewOnly();
+});
+
+document.getElementById('btnNovaEmpresa').addEventListener('click', ()=>{
+  const nome = prompt('Nome da empresa (use exatamente o nome que aparece no Resumo Folha, para a detecção automática funcionar):');
+  if(!nome) return;
+  if(profiles[nome]){ alert('Já existe um perfil com esse nome.'); return; }
+  const codigo = prompt('Código empresa contábil (ex: 001, 101, 099):', '');
+  if(codigo === null) return;
+  const clonar = confirm('Começar esse perfil clonando a base de eventos/contas do perfil atual?\n\nOK = clonar\nCancelar = começar em branco');
+  profiles[nome] = {
+    codigoEmpresa: codigo.trim(),
+    mapping: clonar ? JSON.parse(JSON.stringify(mapping)) : {},
+    ignoreList: clonar ? ignoreList.slice() : DEFAULT_IGNORE.slice()
+  };
+  saveProfiles();
+  activeProfileName = nome;
+  applyActiveProfile();
+  renderProfileSelect();
+  renderBaseTable();
+  renderIgnoreList();
+  if(lastParse) renderAll();
+});
+
+document.getElementById('btnRenomearEmpresa').addEventListener('click', ()=>{
+  const novoNome = prompt('Novo nome para o perfil (deve bater com o nome que aparece no Resumo Folha):', activeProfileName);
+  if(!novoNome || novoNome === activeProfileName) return;
+  if(profiles[novoNome]){ alert('Já existe um perfil com esse nome.'); return; }
+  profiles[novoNome] = profiles[activeProfileName];
+  delete profiles[activeProfileName];
+  activeProfileName = novoNome;
+  saveProfiles();
+  saveActiveProfileName();
+  renderProfileSelect();
+});
+
+document.getElementById('btnExcluirEmpresa').addEventListener('click', ()=>{
+  if(Object.keys(profiles).length <= 1){ alert('Não é possível excluir o único perfil existente.'); return; }
+  if(!confirm(`Excluir o perfil "${activeProfileName}"? Isso apaga a base de eventos e a lista de ignorados desse perfil.`)) return;
+  delete profiles[activeProfileName];
+  saveProfiles();
+  activeProfileName = Object.keys(profiles)[0];
+  applyActiveProfile();
+  renderProfileSelect();
+  renderBaseTable();
+  renderIgnoreList();
+  if(lastParse) renderAll();
+});
+
+function renderAll(){
+  renderPendencias();
+  renderPreviewOnly();
+  renderIgnoreList();
+  renderBaseTable();
+}
+
+function currentRawEventsResolved(){
+  // aplica resoluções de pendência (contabilizar/ignorar) já confirmadas nesta sessão antes de montar linhas
+  return lastParse.rawEvents;
+}
+
+function renderPendencias(){
+  const {pendencias} = buildRows(currentRawEventsResolved());
+  const card = document.getElementById('pendenciasCard');
+  const tbody = document.querySelector('#pendenciasTable tbody');
+  tbody.innerHTML = '';
+  if(pendencias.length === 0){
+    card.classList.add('hidden');
+  } else {
+    card.classList.remove('hidden');
+    pendencias.forEach(p=>{
+      const tr = document.createElement('tr');
+      const pillClass = p.origem === 'desconto' ? 'desconto' : (p.origem==='especial'?'especial':'provento');
+      const sugestaoNote = p.sugestao ? ` <span class="small">(sugestão: ${p.sugestao})</span>` : '';
+      tr.innerHTML = `
+        <td>${p.nome}${sugestaoNote}</td>
+        <td><span class="pill ${pillClass}">${p.origem}</span></td>
+        <td class="num">${fmtMoney(p.valor)}</td>
+        <td>
+          <select data-nome="${p.nome}" class="acaoSelect">
+            <option value="contabilizar">Contabilizar</option>
+            <option value="ignorar_sempre">Ignorar sempre</option>
+            <option value="ignorar_agora">Ignorar só agora</option>
+          </select>
+        </td>
+        <td>
+          <input type="text" class="contaInput" data-nome="${p.nome}" placeholder="ex: 3.1.3.01.0001" value="${p.sugestao || ''}">
+        </td>`;
+      tbody.appendChild(tr);
+    });
+  }
+  document.getElementById('statPendencias').textContent = pendencias.length;
+}
+
+document.getElementById('btnAplicarPendencias').addEventListener('click', ()=>{
+  const selects = document.querySelectorAll('.acaoSelect');
+  selects.forEach(sel=>{
+    const nome = sel.getAttribute('data-nome');
+    const acao = sel.value;
+    const contaInput = document.querySelector(`.contaInput[data-nome="${CSS.escape(nome)}"]`);
+    const conta = contaInput ? contaInput.value.trim() : '';
+    if(acao === 'ignorar_sempre'){
+      if(!ignoreList.includes(nome)) ignoreList.push(nome);
+      saveIgnore();
+      delete lastParse.rawEvents[nome];
+    } else if(acao === 'ignorar_agora'){
+      delete lastParse.rawEvents[nome];
+    } else if(acao === 'contabilizar'){
+      if(!conta){
+        alert(`Informe a conta para o evento "${nome}" antes de aplicar.`);
+        throw new Error('conta faltando');
+      }
+      const origem = lastParse.rawEvents[nome] ? lastParse.rawEvents[nome].origem : 'provento';
+      if(origem === 'desconto'){
+        mapping[nome] = {tipo:'desconto', conta};
+      } else {
+        mapping[nome] = {tipo:'provento', conta};
+      }
+      saveMapping();
+    }
+  });
+  renderAll();
+});
+
+function renderPreviewOnly(){
+  const {finalRows} = buildRows(currentRawEventsResolved());
+  const tbody = document.querySelector('#previewTable tbody');
+  tbody.innerHTML = '';
+  let totalDeb = 0, totalCred = 0, proventos=0, descontos=0;
+  const dataStr = dataLancamentoInput.value ? new Date(dataLancamentoInput.value+'T00:00:00').toLocaleDateString('pt-BR') : '(definir data)';
+  finalRows.forEach(row=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${codigoEmpresaAtual}</td>
+      <td>${dataStr}</td>
+      <td>${row.debito}</td>
+      <td>${row.credito}</td>
+      <td>${CODIGO_HISTORICO}</td>
+      <td>${row.nome}</td>
+      <td class="num">${fmtMoney(row.valor)}</td>`;
+    tbody.appendChild(tr);
+    totalDeb += row.valor; totalCred += row.valor;
+    if(row.credito === CONTA_FIXA) proventos += row.valor;
+    if(row.debito === CONTA_FIXA) descontos += row.valor;
+  });
+  document.getElementById('statProventos').textContent = 'R$ ' + fmtMoney(proventos);
+  document.getElementById('statDescontos').textContent = 'R$ ' + fmtMoney(descontos);
+  document.getElementById('statReconhecidos').textContent = finalRows.length;
+  document.getElementById('statIgnorados').textContent = Object.keys(lastParse.ignoredHits||{}).length;
+  document.getElementById('checkSoma').textContent = `Linhas: ${finalRows.length} · Soma dos lançamentos: R$ ${fmtMoney(totalDeb)}`;
+}
+
+document.getElementById('btnDownload').addEventListener('click', async ()=>{
+  if(!lastParse){ alert('Envie o Resumo Folha primeiro.'); return; }
+  if(!dataLancamentoInput.value){ alert('Informe a data de lançamento.'); return; }
+  const {pendencias, finalRows} = buildRows(currentRawEventsResolved());
+  if(pendencias.length > 0){
+    if(!confirm(`Existem ${pendencias.length} pendência(s) não resolvida(s). Elas NÃO serão incluídas na planilha. Deseja gerar mesmo assim?`)) return;
+  }
+  const dataObj = new Date(dataLancamentoInput.value+'T00:00:00');
+  const header = ["CÓDIGO EMPRESA*","DATA LANÇAMENTO*","CONTA DEBITO","CONTA CREDITO","CÓDIGO HISTÓRICO PADRÃO","COMPLEMENTO","VALOR LANÇAMENTO*","CENTRO CUSTO DEBITO","CENTRO CUSTO CREDITO","CÓDIGO AGRUPADOR"];
+  const rows = finalRows.map(r=>[codigoEmpresaAtual, dataObj, r.debito, r.credito, CODIGO_HISTORICO, r.nome, r.valor, null, null, null]);
+  const aoa = [header, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa, {cellDates:true});
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Planilha1");
+  const mm = String(dataObj.getMonth()+1).padStart(2,'0');
+  const yyyy = dataObj.getFullYear();
+  const arrayBuffer = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+  const blob = new Blob([arrayBuffer], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  await salvarArquivo(`Importação Folha ${mm}-${yyyy}.xlsx`, blob);
+});
+
+function renderIgnoreList(){
+  const box = document.getElementById('ignoreList');
+  box.innerHTML = '';
+  ignoreList.forEach(nome=>{
+    const span = document.createElement('div');
+    span.className = 'stat';
+    span.style.flex = '0 0 auto';
+    span.innerHTML = `${nome} <span class="tag-del" data-nome="${nome}">✕</span>`;
+    box.appendChild(span);
+  });
+  box.querySelectorAll('.tag-del').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const nome = el.getAttribute('data-nome');
+      ignoreList = ignoreList.filter(n=>n!==nome);
+      saveIgnore();
+      if(lastParse) renderAll();
+      else renderIgnoreList();
+    });
+  });
+}
+document.getElementById('btnAddIgnore').addEventListener('click', ()=>{
+  const input = document.getElementById('newIgnoreInput');
+  const nome = input.value.trim();
+  if(!nome) return;
+  if(!ignoreList.includes(nome)) ignoreList.push(nome);
+  saveIgnore();
+  input.value = '';
+  if(lastParse) renderAll();
+  else renderIgnoreList();
+});
+
+function renderBaseTable(filter){
+  const tbody = document.querySelector('#baseTable tbody');
+  tbody.innerHTML = '';
+  const names = Object.keys(mapping).sort((a,b)=>a.localeCompare(b,'pt-BR'));
+  names.forEach(nome=>{
+    if(filter && !nome.toLowerCase().includes(filter.toLowerCase())) return;
+    const m = mapping[nome];
+    const tr = document.createElement('tr');
+    const debito = m.tipo === 'especial' ? m.debito : (m.tipo === 'provento' ? m.conta : CONTA_FIXA);
+    const credito = m.tipo === 'especial' ? m.credito : (m.tipo === 'provento' ? CONTA_FIXA : m.conta);
+    tr.innerHTML = `
+      <td>${nome}</td>
+      <td><span class="pill ${m.tipo}">${m.tipo}</span></td>
+      <td><input type="text" class="editDebito" data-nome="${nome}" value="${debito}" ${m.tipo!=='desconto'?'':'disabled'}></td>
+      <td><input type="text" class="editCredito" data-nome="${nome}" value="${credito}" ${m.tipo!=='provento'?'':'disabled'}></td>
+      <td><span class="tag-del" data-nome="${nome}">excluir</span></td>`;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('.editDebito, .editCredito').forEach(inp=>{
+    inp.addEventListener('change', ()=>{
+      const nome = inp.getAttribute('data-nome');
+      const m = mapping[nome];
+      if(m.tipo === 'especial'){
+        if(inp.classList.contains('editDebito')) m.debito = inp.value.trim();
+        else m.credito = inp.value.trim();
+      } else if(m.tipo === 'provento'){
+        m.conta = document.querySelector(`.editDebito[data-nome="${CSS.escape(nome)}"]`).value.trim();
+      } else {
+        m.conta = document.querySelector(`.editCredito[data-nome="${CSS.escape(nome)}"]`).value.trim();
+      }
+      saveMapping();
+      if(lastParse) renderPreviewOnly();
+    });
+  });
+  tbody.querySelectorAll('.tag-del').forEach(el=>{
+    el.addEventListener('click', ()=>{
+      const nome = el.getAttribute('data-nome');
+      delete mapping[nome];
+      saveMapping();
+      renderBaseTable(document.getElementById('baseSearch').value);
+      if(lastParse) renderPreviewOnly();
+    });
+  });
+}
+document.getElementById('baseSearch').addEventListener('input', (e)=>renderBaseTable(e.target.value));
+
+document.getElementById('btnAddEvent').addEventListener('click', ()=>{
+  const nome = prompt('Nome exato do evento:');
+  if(!nome) return;
+  const tipo = prompt('Tipo: provento, desconto ou especial?', 'provento');
+  if(tipo === 'especial'){
+    const debito = prompt('Conta débito:');
+    const credito = prompt('Conta crédito:');
+    mapping[nome] = {tipo:'especial', debito, credito};
+  } else if(tipo === 'desconto'){
+    const conta = prompt('Conta crédito (o débito será fixo '+CONTA_FIXA+'):');
+    mapping[nome] = {tipo:'desconto', conta};
+  } else {
+    const conta = prompt('Conta débito (o crédito será fixo '+CONTA_FIXA+'):');
+    mapping[nome] = {tipo:'provento', conta};
+  }
+  saveMapping();
+  renderBaseTable();
+  if(lastParse) renderAll();
+});
+
+document.getElementById('btnExportMapping').addEventListener('click', async ()=>{
+  const blob = new Blob([JSON.stringify({mapping, ignoreList}, null, 2)], {type:'application/json'});
+  await salvarArquivo('base_eventos_folha.json', blob);
+});
+document.getElementById('btnImportMapping').addEventListener('click', ()=>{
+  document.getElementById('importMappingFile').click();
+});
+document.getElementById('importMappingFile').addEventListener('change', (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    try{
+      const obj = JSON.parse(ev.target.result);
+      if(obj.mapping){ mapping = obj.mapping; saveMapping(); }
+      if(obj.ignoreList){ ignoreList = obj.ignoreList; saveIgnore(); }
+      renderBaseTable(); renderIgnoreList();
+      if(lastParse) renderAll();
+    }catch(err){ alert('JSON inválido: '+err.message); }
+  };
+  reader.readAsText(file);
+});
+document.getElementById('btnResetMapping').addEventListener('click', ()=>{
+  if(!confirm('Restaurar a base padrão? Isso apaga eventos e contas adicionados/editados manualmente.')) return;
+  mapping = JSON.parse(JSON.stringify(DEFAULT_MAPPING));
+  ignoreList = DEFAULT_IGNORE.slice();
+  saveMapping(); saveIgnore();
+  renderBaseTable(); renderIgnoreList();
+  if(lastParse) renderAll();
+});
+
+// inicialização: carrega perfis de empresa e renderiza tudo mesmo antes de enviar arquivo
+loadProfiles();
+renderProfileSelect();
+renderIgnoreList();
+renderBaseTable();
+</script>
+</body>
+</html>

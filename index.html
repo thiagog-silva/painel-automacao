@@ -1,0 +1,808 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Painel de Automação</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* ===================================================================
+   TOKENS DE DESIGN — mesmo sistema visual do Zerador de Transitória,
+   pra toda a suíte interna parecer um produto único.
+   =================================================================== */
+:root{
+  --bg:#f5f7f5; --surface:#ffffff; --surface-alt:#eef2ef; --ink:#182420; --muted:#5c6f68;
+  --border:#dbe3de; --accent:#0f5d52; --accent-strong:#0b453d; --accent-ink:#f4fbf9; --accent-soft:#e0efec;
+  --danger:#b3261e; --danger-soft:#fbe9e6; --warning:#8a5a00; --warning-soft:#fff1d9;
+  --success:#1e7d4a; --success-soft:#e5f4ea;
+  --shadow:0 1px 2px rgba(15,30,25,.06), 0 8px 24px -12px rgba(15,30,25,.22);
+  --radius:14px; --sidebar-w:264px;
+  --font-display:'IBM Plex Sans Condensed','IBM Plex Sans',sans-serif;
+  --font-body:'IBM Plex Sans',system-ui,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9; --muted:#94a6a0;
+    --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6; --accent-ink:#08201b; --accent-soft:#1a332d;
+    --danger:#ff9d93; --danger-soft:#3a201d; --warning:#ffcf70; --warning-soft:#3a2c12;
+    --success:#8fe3ac; --success-soft:#173425;
+    --shadow:0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9; --muted:#94a6a0;
+  --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6; --accent-ink:#08201b; --accent-soft:#1a332d;
+  --danger:#ff9d93; --danger-soft:#3a201d; --warning:#ffcf70; --warning-soft:#3a2c12;
+  --success:#8fe3ac; --success-soft:#173425;
+  --shadow:0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+}
+
+*{ box-sizing:border-box; }
+html, body{ height:100%; }
+body{ margin:0; background:var(--bg); color:var(--ink); font-family:var(--font-body); overflow:hidden; }
+h1,h2,h3{ font-family:var(--font-display); font-weight:700; text-wrap:balance; margin:0; }
+.mono{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+button{ font-family:var(--font-body); cursor:pointer; border:none; }
+
+/* ---------------------------------------------------------------
+   CASCA DO APP: barra móvel (mobile) + sidebar + conteúdo
+   --------------------------------------------------------------- */
+.shell{ display:flex; height:100%; }
+
+.mobile-bar{
+  display:none; align-items:center; gap:10px; padding:12px 14px; padding-top:calc(12px + env(safe-area-inset-top,0px));
+  border-bottom:1px solid var(--border); background:var(--surface); flex:none;
+}
+.mobile-bar button{ width:34px; height:34px; border-radius:8px; background:var(--surface-alt); border:1px solid var(--border); color:var(--ink); font-size:16px; }
+.mobile-bar strong{ font-family:var(--font-display); font-size:15px; }
+
+.sidebar{
+  width:var(--sidebar-w); flex:none; background:var(--surface); border-right:1px solid var(--border);
+  display:flex; flex-direction:column; padding:18px 14px; padding-top:calc(18px + env(safe-area-inset-top,0px));
+  overflow-y:auto;
+}
+.sidebar-brand{ display:flex; align-items:center; gap:10px; padding:2px 8px 18px; }
+.brand-mark{ width:34px; height:34px; border-radius:9px; background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-weight:700; font-size:14px; flex:none; box-shadow:var(--shadow); }
+.sidebar-brand strong{ display:block; font-family:var(--font-display); font-size:15.5px; line-height:1.2; }
+.sidebar-brand span{ display:block; font-size:11px; color:var(--muted); }
+
+.nav-group-label{ font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); padding:14px 10px 6px; }
+.nav-item{
+  display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:9px; font-size:13.5px; color:var(--ink);
+  background:transparent; width:100%; text-align:left; margin-bottom:2px;
+}
+.nav-item:hover{ background:var(--surface-alt); }
+.nav-item.is-active{ background:var(--accent-soft); color:var(--accent-strong); font-weight:600; }
+.nav-item .ic{ font-size:16px; flex:none; width:20px; text-align:center; }
+.nav-item .tx{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+.sidebar-foot{ margin-top:auto; padding:10px; font-size:11px; color:var(--muted); border-top:1px solid var(--border); padding-top:12px; }
+
+.content{ flex:1; display:flex; flex-direction:column; min-width:0; }
+.content-head{
+  display:flex; align-items:center; gap:12px; padding:14px 22px; padding-top:calc(14px + env(safe-area-inset-top,0px));
+  border-bottom:1px solid var(--border); background:var(--surface); flex:none;
+}
+.content-head h2{ font-size:17px; }
+.content-head .path{ font-size:12px; color:var(--muted); font-family:var(--font-mono); }
+.content-actions{ margin-left:auto; display:flex; gap:8px; }
+.btn-ghost{ background:var(--surface-alt); border:1px solid var(--border); color:var(--ink); border-radius:8px; padding:7px 12px; font-size:12.5px; font-weight:600; }
+.btn-ghost:hover{ background:var(--accent-soft); }
+
+.view{ flex:1; overflow:auto; position:relative; }
+.view iframe{ width:100%; height:100%; border:none; display:block; background:var(--surface); }
+
+/* ---------------------------------------------------------------
+   HOME: grid de cards
+   --------------------------------------------------------------- */
+.home{ padding:28px 30px 48px; max-width:1080px; margin:0 auto; }
+.home-head{ margin-bottom:26px; }
+.home-head h1{ font-size:26px; }
+.home-head p{ color:var(--muted); font-size:14px; margin-top:6px; max-width:60ch; }
+.home-group-label{ font-size:12px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); margin:26px 0 12px; }
+.card-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:14px; }
+.tool-card{
+  text-align:left; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:18px; display:flex; flex-direction:column; gap:10px; transition:border-color .15s, transform .1s, box-shadow .15s;
+}
+.tool-card:hover{ border-color:var(--accent); box-shadow:var(--shadow); transform:translateY(-1px); }
+.tool-card .ic{ width:38px; height:38px; border-radius:10px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; font-size:19px; }
+.tool-card h3{ font-size:15.5px; }
+.tool-card p{ font-size:12.5px; color:var(--muted); margin:0; line-height:1.45; }
+.tool-card .cat{ font-family:var(--font-mono); font-size:10.5px; color:var(--accent); text-transform:uppercase; letter-spacing:.04em; }
+
+.tool-card-wrap{ position:relative; }
+.tool-card-remove{
+  position:absolute; top:8px; right:8px; width:22px; height:22px; border-radius:999px; background:var(--surface);
+  border:1px solid var(--border); color:var(--muted); display:flex; align-items:center; justify-content:center;
+  font-size:12px; cursor:pointer; line-height:1;
+}
+.tool-card-remove:hover{ background:var(--danger-soft); color:var(--danger); border-color:var(--danger); }
+.tool-card-add{ border-style:dashed; color:var(--accent-strong); }
+.tool-card-add:hover{ border-style:solid; }
+
+.add-tool-form{
+  margin-top:18px; padding:20px; background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  max-width:640px;
+}
+.add-tool-form.hidden{ display:none; }
+.add-tool-form h3{ font-size:15px; margin-bottom:6px; }
+.form-hint{ font-size:12.5px; color:var(--muted); margin:0 0 14px; line-height:1.5; }
+.form-row{ margin-bottom:12px; }
+.form-row-3{ display:grid; grid-template-columns:2fr 1fr 1.4fr; gap:10px; }
+.form-row label{ display:block; font-size:12px; color:var(--muted); font-weight:600; }
+.form-row input{
+  width:100%; margin-top:4px; padding:8px 10px; border:1px solid var(--border); border-radius:7px;
+  font-family:var(--font-body); font-size:13px; background:var(--bg); color:var(--ink);
+}
+.form-msg{ font-size:12.5px; margin-bottom:10px; min-height:1em; }
+.form-msg.err{ color:var(--danger); }
+.actions-row{ display:flex; gap:8px; }
+
+.empty-hint{
+  border:1.5px dashed var(--border); border-radius:12px; padding:26px; text-align:center; color:var(--muted);
+  font-size:13px; margin-top:8px;
+}
+code.k{ background:var(--surface-alt); border:1px solid var(--border); padding:1px 6px; border-radius:5px; font-family:var(--font-mono); font-size:12px; }
+
+/* overlay do menu mobile */
+.overlay{ position:fixed; inset:0; background:rgba(10,16,14,.4); z-index:20; display:none; }
+.overlay.is-open{ display:block; }
+
+@media (max-width: 860px){
+  .mobile-bar{ display:flex; }
+  .sidebar{
+    position:fixed; inset:0 auto 0 0; z-index:30; transform:translateX(-100%); transition:transform .2s ease; box-shadow:var(--shadow);
+  }
+  .sidebar.is-open{ transform:translateX(0); }
+  .content-head .path{ display:none; }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+  <!-- barra mobile: some em telas largas -->
+  <div class="mobile-bar">
+    <button id="btnMenu" aria-label="Abrir menu">☰</button>
+    <strong id="mobileTitle">Painel de Automação</strong>
+  </div>
+
+  <div class="overlay" id="overlay"></div>
+
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-mark">±</div>
+      <div>
+        <strong id="sysName">Painel de Automação</strong>
+        <span>Ferramentas internas</span>
+      </div>
+    </div>
+    <button class="nav-item" id="navHome"><span class="ic">🏠</span><span class="tx">Início</span></button>
+    <div id="navGroups"></div>
+    <div class="sidebar-foot">Cada ferramenta roda isolada, direto no navegador — nenhum dado sai daqui.</div>
+  </nav>
+
+  <div class="content">
+    <div class="content-head">
+      <h2 id="headTitle">Início</h2>
+      <span class="path mono" id="headPath"></span>
+      <div class="content-actions" id="headActions" style="display:none">
+        <button class="btn-ghost" id="btnAbrirNovaAba">Abrir em nova aba ↗</button>
+      </div>
+    </div>
+    <div class="view" id="view"></div>
+  </div>
+</div>
+<script>
+/* =====================================================================
+   PAINEL DE AUTOMAÇÃO — casca (hub) para as ferramentas internas
+   =====================================================================
+
+   COMO ADICIONAR UMA NOVA FERRAMENTA
+   -----------------------------------
+   1. Peça para o Claude anexar o arquivo .html da sua ferramenta a este
+      Artifact (ele fica salvo em algo como "tools/nome-da-ferramenta.html",
+      ao lado deste index.html).
+   2. Copie um bloco do array TOOLS abaixo e ajuste os campos:
+        id        -> identificador único (usado na URL, ex: #/tool/conciliacao)
+        nome      -> título mostrado no menu e no card da Home
+        descricao -> frase curta explicando o que a ferramenta faz
+        icone     -> um emoji que representa a ferramenta
+        categoria -> agrupamento no menu/Home (ex: "Conciliação", "Importação")
+        arquivo   -> caminho do arquivo dentro deste Artifact
+   3. Pronto — o menu lateral e os cards da Home são montados sozinhos a
+      partir deste array; não precisa mexer em mais nada.
+
+   PONTE DE CAPACIDADES (downloads, etc.)
+   -----------------------------------
+   Se a sua ferramenta usa `window.claude.use('downloads')` (ou outra
+   capacidade) para salvar um arquivo, ela roda dentro de um <iframe>
+   aqui dentro e por padrão não teria acesso direto a isso. Para
+   resolver, cole o bloco "PONTE DE CAPACIDADES" que está no topo do
+   <script> de tools/conciliacao-transitoria.html (ou de
+   tools/importador-icms.html) no topo da sua ferramenta — ele detecta
+   que está dentro do hub e repassa o pedido pra cá. Fora do hub
+   (arquivo aberto sozinho) esse bloco não faz nada e a ferramenta usa
+   o suporte nativo normalmente. E funciona tanto dentro do Claude quanto
+   no painel exportado rodando sozinho no navegador (nesse caso, cai no
+   download nativo do navegador automaticamente).
+
+   ADICIONAR SEM MEXER NO CÓDIGO
+   -----------------------------------
+   Também dá pra adicionar uma ferramenta direto pela interface: na aba
+   "Início", card "Adicionar nova ferramenta" → escolhe o arquivo .html
+   (gerado no "prompt de padrões do hub") → preenche nome/ícone/categoria.
+   Fica salva neste navegador (localStorage) e some se limpar os dados do
+   site ou trocar de navegador/computador — pra ela ficar definitiva pra
+   todo mundo, ainda é melhor pedir pro Claude anexar o arquivo aqui e
+   adicionar no array TOOLS.
+   ===================================================================== */
+
+const NOME_DO_SISTEMA = 'Painel de Automação';
+
+const TOOLS = [
+  {
+    id: 'conciliador-financiamento-beija-flor',
+    nome: 'Conciliação Empréstimos e Financiamentos',
+    descricao: 'Com base na planilha de empréstimos unificados, concilia todos os pagamentos conforme balancete e gera os lançamentos de apropriação de juros e LP/CP.',
+    icone: '⚖️',
+    categoria: 'Conciliação',
+    arquivo: 'tools/conciliador-financiamento-beija-flor.html',
+  },
+  {
+    id: 'conciliacao-transitoria',
+    nome: 'Conciliador de Transitória entre Bancos',
+    descricao: 'Concilia o razão contábil dia a dia por empresa e contrapartida, aponta os grupos que não fecham e gera os lançamentos de ajuste.',
+    icone: '⚖️',
+    categoria: 'Conciliação',
+    arquivo: 'tools/conciliacao-transitoria.html',
+  },
+  {
+    id: 'zerador-contas-transitorias',
+    nome: 'Zerador de Transitória',
+    descricao: 'Aba feita exclusivamente para geração de lançamentos manuais conforme saldo final informado.',
+    icone: '⚖️',
+    categoria: 'Conciliação',
+    arquivo: 'tools/zerador-contas-transitorias.html',
+  },
+  {
+    id: 'importador-icms',
+    nome: 'Importador ICMS',
+    descricao: 'Cruza a planilha BASE, os recibos SPED em PDF e os razões de crédito/débito para preencher a apuração mensal de ICMS por filial.',
+    icone: '🧾',
+    categoria: 'Apuração de Impostos',
+    arquivo: 'tools/importador-icms.html',
+  },
+  {
+    id: 'importacao-pis-cofins-beija-flor',
+    nome: 'Apuração Pis e Cofins',
+    descricao: 'Lê a apuração completa de Pis e Cofins (.xlsx) por empresa, cruza cada evento com a base de contas e gera a planilha de lançamento contábil pronta para importar.',
+    icone: '🧾',
+    categoria: 'Apuração de Impostos',
+    arquivo: 'tools/importacao-pis-cofins-beija-flor.html',
+  },
+  {
+    id: 'extrair-folha',
+    nome: 'Resumo Férias/Rescisão',
+    descricao: 'Lê o PDF da Relação de Cálculo da folha e monta a lista de Desconto Adto Férias e Líquido Rescisão pronta pra colar no Excel.',
+    icone: '🗒️',
+    categoria: 'Folha de Pagamento',
+    arquivo: 'tools/extrair-folha.html',
+  },
+  {
+    id: 'importacao-folha',
+    nome: 'Importação Folha de Pagamento',
+    descricao: 'Lê o Resumo Folha (.xlsx) por empresa, cruza cada evento com a base de contas e gera a planilha de lançamento contábil pronta para importar.',
+    icone: '📄',
+    categoria: 'Folha de Pagamento',
+    arquivo: 'tools/importacao-folha.html',
+  },
+  {
+    id: 'conferencia-faturamento-compras',
+    nome: 'Conferência Faturamento e Compras',
+    descricao: 'Preenche a aba Preencher do consolidado com os relatórios de movimentação por CFOP e confere contra o balancete',
+    icone: '🧾',
+    categoria: 'Conciliação',
+    arquivo: 'tools/conferencia-faturamento-compras.html',
+  },
+  // -> novas ferramentas entram aqui, seguindo o modelo acima.
+];
+
+// ---------------------------------------------------------------------
+// FERRAMENTAS ADICIONADAS PELO USUÁRIO ("Adicionar nova ferramenta")
+// ---------------------------------------------------------------------
+// Guardadas no localStorage deste navegador (não sai daqui, não depende
+// do Claude). Cada uma guarda o HTML inteiro como texto; na hora de abrir,
+// a gente cria uma Blob URL na hora — por isso funciona offline também.
+let ferramentasCustom = [];
+function carregarFerramentasCustom(){
+  try{
+    const bruto = localStorage.getItem('hub_ferramentas_custom');
+    ferramentasCustom = bruto ? JSON.parse(bruto) : [];
+  }catch(e){ ferramentasCustom = []; }
+}
+function salvarFerramentasCustom(){
+  try{ localStorage.setItem('hub_ferramentas_custom', JSON.stringify(ferramentasCustom)); }catch(e){}
+}
+function todasFerramentas(){ return TOOLS.concat(ferramentasCustom); }
+function gerarIdUnico(nome){
+  const semAcento = (nome || 'ferramenta').toLowerCase().normalize('NFD').split('').filter(ch => ch.codePointAt(0) < 0x0300 || ch.codePointAt(0) > 0x036f).join('');
+  const base = semAcento.replace(/[^a-z0-9]+/g,'-').replace(/(^-+|-+$)/g,'') || 'ferramenta';
+  let id = base, n = 1;
+  while (todasFerramentas().some(t => t.id === id)) { id = `${base}-${++n}`; }
+  return id;
+}
+carregarFerramentasCustom();
+
+document.getElementById('sysName').textContent = NOME_DO_SISTEMA;
+document.getElementById('mobileTitle').textContent = NOME_DO_SISTEMA;
+document.title = NOME_DO_SISTEMA;
+
+// ---------------------------------------------------------------------
+// MENU MOBILE (sidebar em drawer)
+// ---------------------------------------------------------------------
+const sidebar = document.getElementById('sidebar');
+const overlay = document.getElementById('overlay');
+function fecharMenu(){ sidebar.classList.remove('is-open'); overlay.classList.remove('is-open'); }
+function abrirMenu(){ sidebar.classList.add('is-open'); overlay.classList.add('is-open'); }
+document.getElementById('btnMenu').addEventListener('click', abrirMenu);
+overlay.addEventListener('click', fecharMenu);
+
+// ---------------------------------------------------------------------
+// MONTAGEM DO MENU LATERAL, AGRUPADO POR CATEGORIA
+// ---------------------------------------------------------------------
+function agruparPorCategoria(lista){
+  const grupos = new Map();
+  lista.forEach(t => {
+    const cat = t.categoria || 'Ferramentas';
+    if (!grupos.has(cat)) grupos.set(cat, []);
+    grupos.get(cat).push(t);
+  });
+  return grupos;
+}
+
+function montarSidebar(){
+  const host = document.getElementById('navGroups');
+  host.innerHTML = '';
+  const grupos = agruparPorCategoria(todasFerramentas());
+  grupos.forEach((itens, categoria) => {
+    const label = document.createElement('div');
+    label.className = 'nav-group-label';
+    label.textContent = categoria;
+    host.appendChild(label);
+    itens.forEach(t => {
+      const btn = document.createElement('button');
+      btn.className = 'nav-item';
+      btn.dataset.tool = t.id;
+      btn.innerHTML = `<span class="ic">${t.icone}</span><span class="tx">${escapeHTML(t.nome)}</span>`;
+      btn.addEventListener('click', () => { navegarPara(t.id); fecharMenu(); });
+      host.appendChild(btn);
+    });
+  });
+}
+
+function escapeHTML(s){
+  return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ---------------------------------------------------------------------
+// HOME: grid de cards, agrupado por categoria
+// ---------------------------------------------------------------------
+function montarHome(){
+  const lista = todasFerramentas();
+  const grupos = agruparPorCategoria(lista);
+  let html = `<div class="home">
+    <div class="home-head">
+      <h1>${escapeHTML(NOME_DO_SISTEMA)}</h1>
+      <p>Escolha uma ferramenta abaixo ou pelo menu ao lado. Cada uma abre aqui mesmo, sem sair desta página.</p>
+    </div>`;
+
+  if (lista.length === 0) {
+    html += `<div class="empty-hint">Nenhuma ferramenta cadastrada ainda. Use o card "Adicionar nova ferramenta" abaixo, ou adicione uma no array <code class="k">TOOLS</code>, no topo do script.</div>`;
+  } else {
+    grupos.forEach((itens, categoria) => {
+      html += `<div class="home-group-label">${escapeHTML(categoria)}</div><div class="card-grid">`;
+      itens.forEach(t => {
+        const removerBtn = t.custom
+          ? `<span class="tool-card-remove" data-remover="${t.id}" title="Remover esta ferramenta">✕</span>`
+          : '';
+        html += `<div class="tool-card-wrap">
+          <button class="tool-card" data-tool="${t.id}">
+            <div class="ic">${t.icone}</div>
+            <h3>${escapeHTML(t.nome)}</h3>
+            <p>${escapeHTML(t.descricao)}</p>
+          </button>
+          ${removerBtn}
+        </div>`;
+      });
+      html += '</div>';
+    });
+  }
+
+  html += `<div class="home-group-label">Personalização</div><div class="card-grid">
+    <button class="tool-card tool-card-add" id="btnAdicionarFerramenta">
+      <div class="ic">➕</div>
+      <h3>Adicionar nova ferramenta</h3>
+      <p>Importe um arquivo .html pronto (no padrão do hub) e ele vira uma aba aqui, salva neste navegador.</p>
+    </button>
+  </div>`;
+
+  html += `<div class="add-tool-form hidden" id="addToolForm">
+    <h3>Adicionar nova ferramenta</h3>
+    <p class="form-hint">O arquivo deve ser um HTML único e completo (o próprio Claude gera nesse formato quando você pede — veja o "prompt de padrões"). Ele fica salvo só neste navegador.</p>
+    <div class="form-row">
+      <label>Arquivo .html<input type="file" id="addToolFile" accept=".html,.htm"></label>
+    </div>
+    <div class="form-row form-row-3">
+      <label>Nome<input type="text" id="addToolNome" placeholder="Ex: Conferência de Boletos"></label>
+      <label>Ícone (emoji)<input type="text" id="addToolIcone" placeholder="🧩" maxlength="4"></label>
+      <label>Categoria<input type="text" id="addToolCategoria" placeholder="Ex: Conciliação"></label>
+    </div>
+    <div class="form-row">
+      <label>Descrição curta<input type="text" id="addToolDescricao" placeholder="O que essa ferramenta faz, em uma frase"></label>
+    </div>
+    <div id="addToolMsg" class="form-msg"></div>
+    <div class="actions-row">
+      <button class="btn-ghost" id="btnConfirmarAdicao">Adicionar ao painel</button>
+      <button class="btn-ghost" id="btnCancelarAdicao">Cancelar</button>
+    </div>
+  </div>`;
+
+  html += '</div>';
+  const view = document.getElementById('view');
+  view.innerHTML = html;
+  view.querySelectorAll('.tool-card[data-tool]').forEach(card => {
+    card.addEventListener('click', () => navegarPara(card.dataset.tool));
+  });
+  view.querySelectorAll('[data-remover]').forEach(el => {
+    el.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      removerFerramentaCustom(el.dataset.remover);
+    });
+  });
+  configurarFormularioAdicao(view);
+}
+
+function removerFerramentaCustom(id){
+  if (!confirm('Remover esta ferramenta do painel? Ela some deste navegador (o arquivo original que você importou não é afetado).')) return;
+  ferramentasCustom = ferramentasCustom.filter(t => t.id !== id);
+  salvarFerramentasCustom();
+  montarSidebar();
+  if (location.hash.replace(/^#/, '') === `/tool/${id}`) navegarPara(null);
+  else montarHome();
+}
+
+function configurarFormularioAdicao(view){
+  const btnAbrir = document.getElementById('btnAdicionarFerramenta');
+  const form = document.getElementById('addToolForm');
+  const msg = document.getElementById('addToolMsg');
+  if (!btnAbrir || !form) return;
+
+  btnAbrir.addEventListener('click', () => {
+    form.classList.remove('hidden');
+    btnAbrir.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  });
+  document.getElementById('btnCancelarAdicao').addEventListener('click', () => form.classList.add('hidden'));
+
+  document.getElementById('btnConfirmarAdicao').addEventListener('click', () => {
+    const arquivo = document.getElementById('addToolFile').files[0];
+    const nome = document.getElementById('addToolNome').value.trim();
+    const icone = document.getElementById('addToolIcone').value.trim() || '🧩';
+    const categoria = document.getElementById('addToolCategoria').value.trim() || 'Personalizadas';
+    const descricao = document.getElementById('addToolDescricao').value.trim() || 'Ferramenta importada pelo usuário.';
+
+    if (!arquivo){ msg.textContent = 'Escolha o arquivo .html antes de adicionar.'; msg.className = 'form-msg err'; return; }
+    if (!nome){ msg.textContent = 'Dê um nome pra ferramenta.'; msg.className = 'form-msg err'; return; }
+
+    const leitor = new FileReader();
+    leitor.onload = () => {
+      const htmlConteudo = String(leitor.result || '');
+      if (!/<html[\s>]/i.test(htmlConteudo)) {
+        msg.textContent = 'Esse arquivo não parece ser um HTML completo (faltando a tag <html>). Confirma o arquivo antes de tentar de novo.';
+        msg.className = 'form-msg err';
+        return;
+      }
+      const novaFerramenta = {
+        id: gerarIdUnico(nome),
+        nome, descricao, icone, categoria,
+        custom: true,
+        htmlConteudo,
+      };
+      ferramentasCustom.push(novaFerramenta);
+      salvarFerramentasCustom();
+      montarSidebar();
+      navegarPara(novaFerramenta.id);
+    };
+    leitor.onerror = () => { msg.textContent = 'Não consegui ler esse arquivo. Tente novamente.'; msg.className = 'form-msg err'; };
+    leitor.readAsText(arquivo, 'utf-8');
+  });
+}
+
+// ---------------------------------------------------------------------
+// ABERTURA DE UMA FERRAMENTA NUM IFRAME
+// ---------------------------------------------------------------------
+let ultimaBlobUrlFerramenta = null;
+function montarFerramenta(tool){
+  if (ultimaBlobUrlFerramenta) { URL.revokeObjectURL(ultimaBlobUrlFerramenta); ultimaBlobUrlFerramenta = null; }
+  let src;
+  if (tool.custom) {
+    ultimaBlobUrlFerramenta = URL.createObjectURL(new Blob([tool.htmlConteudo], { type: 'text/html' }));
+    src = ultimaBlobUrlFerramenta;
+  } else {
+    src = encodeURI(tool.arquivo);
+  }
+  const view = document.getElementById('view');
+  view.innerHTML = `<iframe id="toolFrame" src="${src}" title="${escapeHTML(tool.nome)}" allow="clipboard-write; clipboard-read"></iframe>`;
+  const iframe = document.getElementById('toolFrame');
+  iframe.addEventListener('load', () => aplicarTemaHub(iframe));
+}
+
+// ---------------------------------------------------------------------
+// TEMA AUTOMÁTICO: repinta qualquer ferramenta anexada com a mesma
+// paleta de cores do hub, mesmo que o HTML original tenha vindo com
+// outras cores — sem precisar editar o arquivo da ferramenta na mão.
+//
+// Como funciona: cada ferramenta declara suas cores como variáveis CSS
+// num bloco `:root{...}` (é assim que os HTMLs que você manda costumam
+// ser escritos). Depois que o iframe carrega, o hub lê os NOMES dessas
+// variáveis, reconhece padrões comuns (--accent, --bg, --ink, --border,
+// --warn, --danger etc.) e injeta um <style> por cima sobrescrevendo só
+// essas variáveis com os valores da paleta do hub — o resto do CSS da
+// ferramenta (layout, espaçamento, tipografia) continua intacto.
+//
+// Limite: só funciona para cores declaradas como variável CSS. Cor
+// escrita direto no meio de uma regra (ex: "color:#1B2A3D" sem var())
+// não é detectada. Se uma ferramenta nova vier assim, é só pedir pra eu
+// converter as cores dela pra variáveis antes de anexar — aí o ajuste
+// automático passa a valer nela também.
+// ---------------------------------------------------------------------
+const PALETA_HUB = {
+  light: {
+    bg:'#f5f7f5', surface:'#ffffff', surfaceAlt:'#eef2ef', ink:'#182420', muted:'#5c6f68', border:'#dbe3de',
+    accent:'#0f5d52', accentStrong:'#0b453d', accentInk:'#f4fbf9', accentSoft:'#e0efec',
+    danger:'#b3261e', dangerSoft:'#fbe9e6', warning:'#8a5a00', warningSoft:'#fff1d9',
+    success:'#1e7d4a', successSoft:'#e5f4ea',
+  },
+  dark: {
+    bg:'#101614', surface:'#182120', surfaceAlt:'#1e2926', ink:'#e6ede9', muted:'#94a6a0', border:'#2b3733',
+    accent:'#57d9c1', accentStrong:'#8ee9d6', accentInk:'#08201b', accentSoft:'#1a332d',
+    danger:'#ff9d93', dangerSoft:'#3a201d', warning:'#ffcf70', warningSoft:'#3a2c12',
+    success:'#8fe3ac', successSoft:'#173425',
+  },
+};
+
+// Regras de reconhecimento de nome -> token do hub, da mais específica
+// para a mais genérica (a primeira que bater é usada).
+const REGRAS_TEMA = [
+  [['accent-ink','on-accent','primary-ink','brand-ink'], 'accentInk'],
+  [['accent-deep','accent-strong','accent-dark','primary-deep','primary-dark','primary-strong','brand-deep','brand-dark'], 'accentStrong'],
+  [['accent-tint','accent-soft','accent-light','primary-tint','primary-soft','primary-light','brand-tint','brand-soft'], 'accentSoft'],
+  [['accent','primary','brand'], 'accent'],
+  [['warn-tint','warning-tint','warn-soft','warning-soft','warn-light'], 'warningSoft'],
+  [['warn','warning'], 'warning'],
+  [['danger-tint','danger-soft','error-tint','error-soft','danger-light'], 'dangerSoft'],
+  [['danger','error'], 'danger'],
+  [['success-tint','success-soft','positive-soft','ok-soft'], 'successSoft'],
+  [['success','positive'], 'success'],
+  [['surface-alt','panel-alt','paper-2','card-alt','surface-2'], 'surfaceAlt'],
+  [['surface','panel','paper','card-bg'], 'surface'],
+  [['border','line','divider','stroke'], 'border'],
+  [['muted','ink-soft','text-muted','subtle','secondary-text','text-secondary'], 'muted'],
+  [['ink','text','fg','foreground'], 'ink'],
+  [['bg','background','canvas'], 'bg'],
+];
+
+function mapearVariavelDeTema(nomeVar){
+  const n = nomeVar.replace(/^--/, '').toLowerCase();
+  for (const [chaves, alvo] of REGRAS_TEMA) {
+    if (chaves.some(k => n.includes(k))) return alvo;
+  }
+  return null;
+}
+
+// Encontra todo nome de variável CSS declarado dentro de blocos :root
+// (inclusive dentro de @media/[data-theme]) em qualquer <style> do doc.
+function detectarVariaveisDeCor(doc){
+  const nomes = new Set();
+  const regexRoot = /:root(?:\[[^\]]*\])?\s*{([^}]*)}/g;
+  const regexProp = /(--[\w-]+)\s*:/g;
+  Array.from(doc.querySelectorAll('style')).forEach(styleEl => {
+    const texto = styleEl.textContent || '';
+    let m;
+    while ((m = regexRoot.exec(texto))) {
+      const bloco = m[1];
+      let mp;
+      while ((mp = regexProp.exec(bloco))) nomes.add(mp[1]);
+    }
+  });
+  return Array.from(nomes);
+}
+
+// Algumas ferramentas usam um nome de variável (ex.: --ink) só como um tom
+// escuro fixo de fundo/base, sem ter um modo escuro próprio de verdade. Se a
+// ferramenta original não define nenhum bloco de modo escuro, forçar o par
+// claro/escuro do hub em cima dela pode inverter esse tom sem querer (fundo
+// claro virando escuro ou vice-versa) e quebrar o contraste do design
+// original. Por isso só aplicamos o par claro/escuro quando a própria
+// ferramenta já sinaliza que foi pensada para os dois modos; caso contrário
+// aplicamos só a paleta clara do hub, de forma fixa, preservando o desenho
+// original da ferramenta em qualquer modo.
+function suportaModoEscuroProprio(doc){
+  return Array.from(doc.querySelectorAll('style')).some(styleEl => {
+    const texto = styleEl.textContent || '';
+    return /prefers-color-scheme\s*:\s*dark/i.test(texto) || /\[data-theme\s*=\s*["']?dark["']?\]/i.test(texto);
+  });
+}
+
+// Fonte oficial do hub (o mesmo padrão tipográfico do Zerador de Transitória:
+// IBM Plex Sans/Sans Condensed/Mono). Garante que toda ferramenta carregada
+// no hub puxe essa fonte, mesmo que o HTML original dela não referencie.
+const FONTE_HUB_HREF = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap';
+
+function garantirFonteHub(doc){
+  const jaTem = Array.from(doc.querySelectorAll('link[rel="stylesheet"]')).some(l => (l.getAttribute('href') || '').includes('IBM+Plex'));
+  if (jaTem) return;
+  const link = doc.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = FONTE_HUB_HREF;
+  link.setAttribute('data-fonte-hub', '1');
+  doc.head.appendChild(link);
+}
+
+// CSS de tipografia/identidade visual aplicado em cima de QUALQUER ferramenta,
+// pra ela seguir o mesmo padrão visual do Zerador de Transitória (fonte,
+// pesos de título, cantos de botão), além das cores já remapeadas acima.
+const TIPOGRAFIA_HUB_CSS = `
+  :root{ --font-display:'IBM Plex Sans Condensed','IBM Plex Sans',sans-serif; --font-body:'IBM Plex Sans',system-ui,sans-serif; --font-mono:'IBM Plex Mono',ui-monospace,monospace; }
+  body, button, input, select, textarea, table{ font-family:'IBM Plex Sans',system-ui,sans-serif !important; }
+  h1,h2,h3{ font-family:'IBM Plex Sans Condensed','IBM Plex Sans',sans-serif !important; font-weight:700 !important; letter-spacing:-0.01em; }
+  button{ border-radius:9px !important; font-weight:600 !important; }
+`;
+
+function aplicarTemaHub(iframe){
+  let doc;
+  try { doc = iframe.contentDocument; } catch (err) { return; }
+  if (!doc) return;
+
+  garantirFonteHub(doc);
+
+  const temaProprio = suportaModoEscuroProprio(doc);
+  const nomes = detectarVariaveisDeCor(doc);
+  const mapeadas = nomes.map(n => [n, mapearVariavelDeTema(n)]).filter(([, alvo]) => alvo);
+  const paraLinhas = (paleta) => mapeadas.map(([n, alvo]) => `${n}: ${paleta[alvo]};`).join(' ');
+  const corCss = mapeadas.length
+    ? (temaProprio
+        ? `:root{ ${paraLinhas(PALETA_HUB.light)} }\n` +
+          `@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){ ${paraLinhas(PALETA_HUB.dark)} } }\n` +
+          `:root[data-theme="dark"]{ ${paraLinhas(PALETA_HUB.dark)} }`
+        : `:root{ ${paraLinhas(PALETA_HUB.light)} }`)
+    : '';
+
+  const antigo = doc.querySelector('style[data-tema-hub]');
+  if (antigo) antigo.remove();
+  const styleTag = doc.createElement('style');
+  styleTag.setAttribute('data-tema-hub', '1');
+  styleTag.textContent = corCss + '\n' + TIPOGRAFIA_HUB_CSS;
+  doc.head.appendChild(styleTag);
+
+  sincronizarTemaExplicito(iframe);
+}
+
+// Repassa pro iframe o mesmo tema (claro/escuro) escolhido explicitamente
+// no hub, já que cada iframe é um documento separado e não herda isso.
+function sincronizarTemaExplicito(iframe){
+  let doc;
+  try { doc = iframe.contentDocument; } catch (err) { return; }
+  if (!doc) return;
+  const tema = document.documentElement.getAttribute('data-theme');
+  if (tema) doc.documentElement.setAttribute('data-theme', tema);
+  else doc.documentElement.removeAttribute('data-theme');
+}
+
+new MutationObserver(() => {
+  const iframe = document.getElementById('toolFrame');
+  if (iframe) sincronizarTemaExplicito(iframe);
+}).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+// ---------------------------------------------------------------------
+// ROTEAMENTO (hash): #/  ->  Home   |   #/tool/<id>  ->  ferramenta
+// ---------------------------------------------------------------------
+function navegarPara(id){
+  location.hash = id ? `/tool/${id}` : '/';
+}
+
+function aplicarRota(){
+  const hash = location.hash.replace(/^#/, '');
+  const m = hash.match(/^\/tool\/(.+)$/);
+  const idAtivo = m ? decodeURIComponent(m[1]) : null;
+  const tool = idAtivo ? todasFerramentas().find(t => t.id === idAtivo) : null;
+
+  document.querySelectorAll('.nav-item[data-tool]').forEach(el => {
+    el.classList.toggle('is-active', el.dataset.tool === idAtivo);
+  });
+
+  const headActions = document.getElementById('headActions');
+  const headPath = document.getElementById('headPath');
+  const headTitle = document.getElementById('headTitle');
+
+  if (tool) {
+    headTitle.textContent = tool.nome;
+    headPath.textContent = tool.arquivo;
+    headActions.style.display = 'flex';
+    document.getElementById('btnAbrirNovaAba').onclick = () => {
+      if (tool.custom) window.open(URL.createObjectURL(new Blob([tool.htmlConteudo], { type: 'text/html' })), '_blank');
+      else window.open(tool.arquivo, '_blank');
+    };
+    montarFerramenta(tool);
+  } else {
+    headTitle.textContent = 'Início';
+    headPath.textContent = '';
+    headActions.style.display = 'none';
+    montarHome();
+  }
+}
+
+document.getElementById('navHome').addEventListener('click', () => { navegarPara(null); fecharMenu(); });
+window.addEventListener('hashchange', aplicarRota);
+
+// ---------------------------------------------------------------------
+// PONTE DE CAPACIDADES: repassa pedidos de ferramentas embutidas
+// (iframes) para as capacidades reais do Claude neste documento.
+// ---------------------------------------------------------------------
+// Fallback nativo de download (usado quando este painel roda fora do
+// Claude — exportado, aberto direto no navegador). Cria um link com o
+// Blob e clica nele; é o mecanismo padrão de qualquer site.
+function salvarArquivoNativo(filename, blob){
+  try{
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename || 'arquivo';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    return { status: 'saved' };
+  }catch(err){
+    throw { code: 'unavailable', message: 'Não foi possível salvar o arquivo neste navegador.' };
+  }
+}
+
+window.addEventListener('message', async (ev) => {
+  const msg = ev.data;
+  if (!msg || msg.__ponteClaude !== true || msg.tipo !== 'chamada') return;
+  const origem = ev.source;
+  if (!origem) return;
+
+  async function responder(resultado, erro){
+    origem.postMessage({ __ponteClaude: true, tipo: 'resposta', id: msg.id, resultado, erro }, '*');
+  }
+
+  try {
+    if (msg.acao === 'downloads.save') {
+      let resultado = null;
+      // Dentro do Claude: usa a capacidade real de downloads.
+      if (typeof window.claude !== 'undefined' && typeof window.claude.use === 'function') {
+        const downloads = await window.claude.use('downloads');
+        if (downloads) resultado = await downloads.save(msg.payload);
+      }
+      // Fora do Claude (painel exportado, rodando sozinho no navegador):
+      // salva com o mecanismo nativo do navegador (link + clique).
+      if (!resultado) resultado = salvarArquivoNativo(msg.payload.filename, msg.payload.data);
+      await responder(resultado, null);
+    } else {
+      throw { code: 'unavailable', message: 'Ação não suportada: ' + msg.acao };
+    }
+  } catch (err) {
+    await responder(null, { code: err.code || 'unavailable', message: err.message || String(err) });
+  }
+});
+
+// ---------------------------------------------------------------------
+// INICIALIZAÇÃO
+// ---------------------------------------------------------------------
+montarSidebar();
+aplicarRota();
+</script>
+</body>
+</html>

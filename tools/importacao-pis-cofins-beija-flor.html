@@ -1,0 +1,979 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="hub-nome" content="Apuração Pis e Cofins">
+<meta name="hub-descricao" content="Lê a apuração completa de Pis e Cofins (.xlsx) por empresa, cruza cada evento com a base de contas e gera a planilha de lançamento contábil pronta para importar.">
+<meta name="hub-icone" content="🧾">
+<meta name="hub-categoria" content="Apuração de Impostos">
+<title>Importação PIS/COFINS - Beija Flor</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#f5f7f5;
+  --surface:#ffffff;
+  --surface-alt:#eef2ef;
+  --ink:#182420;
+  --muted:#5c6f68;
+  --border:#dbe3de;
+  --accent:#0f5d52;
+  --accent-strong:#0b453d;
+  --accent-ink:#f4fbf9;
+  --accent-soft:#e0efec;
+  --danger:#b3261e;
+  --danger-soft:#fbe9e6;
+  --warning:#8a5a00;
+  --warning-soft:#fff1d9;
+  --success:#1e7d4a;
+  --success-soft:#e5f4ea;
+  --tag-debito-bg:#fff1d9;
+  --tag-debito-ink:#8a5a00;
+  --tag-credito-bg:#e3edfb;
+  --tag-credito-ink:#1b4f8a;
+  --shadow: 0 1px 2px rgba(15,30,25,.06), 0 8px 24px -12px rgba(15,30,25,.22);
+  --radius:14px;
+  --font-display:'IBM Plex Sans Condensed', 'IBM Plex Sans', sans-serif;
+  --font-body:'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono:'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9;
+    --muted:#94a6a0; --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6;
+    --accent-ink:#08201b; --accent-soft:#1a332d; --danger:#ff9d93; --danger-soft:#3a201d;
+    --warning:#ffcf70; --warning-soft:#3a2c12; --success:#8fe3ac; --success-soft:#173425;
+    --tag-debito-bg:#3a2c12; --tag-debito-ink:#ffcf70; --tag-credito-bg:#182b3d; --tag-credito-ink:#8fc2ff;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9;
+  --muted:#94a6a0; --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6;
+  --accent-ink:#08201b; --accent-soft:#1a332d; --danger:#ff9d93; --danger-soft:#3a201d;
+  --warning:#ffcf70; --warning-soft:#3a2c12; --success:#8fe3ac; --success-soft:#173425;
+  --tag-debito-bg:#3a2c12; --tag-debito-ink:#ffcf70; --tag-credito-bg:#182b3d; --tag-credito-ink:#8fc2ff;
+  --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+}
+
+*{ box-sizing:border-box; }
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--font-body);
+  margin:0; padding-inline:16px; padding-block:20px 60px;
+}
+h1,h2,h3{ font-family:var(--font-display); font-weight:700; text-wrap:balance; margin:0; }
+.mono{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+.app-shell{ max-width:1180px; margin:0 auto; }
+
+.topbar{
+  position:sticky; top:env(safe-area-inset-top,0px); z-index:30;
+  background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--border); margin:-20px -16px 28px; padding:16px;
+}
+.topbar-inner{ max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:14px 24px; justify-content:space-between; }
+.brand{ display:flex; align-items:center; gap:12px; }
+.brand-mark{
+  width:38px; height:38px; border-radius:10px; background:var(--accent); color:var(--accent-ink);
+  display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-weight:700; font-size:15px;
+  box-shadow:var(--shadow); flex:none;
+}
+.brand h1{ font-size:19px; letter-spacing:.2px; }
+.brand p{ margin:2px 0 0; font-size:12.5px; color:var(--muted); }
+.steps-pills{ display:flex; gap:8px; flex-wrap:wrap; }
+.step-pill{
+  font-family:var(--font-mono); font-size:11.5px; letter-spacing:.03em; padding:6px 11px; border-radius:999px;
+  border:1px solid var(--border); color:var(--muted); background:var(--surface); white-space:nowrap;
+}
+.step-pill.is-active{ border-color:var(--accent); color:var(--accent-strong); background:var(--accent-soft); font-weight:600; }
+.step-pill.is-done{ color:var(--success); border-color:var(--success); }
+
+.step-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:26px; margin-bottom:22px; box-shadow:var(--shadow);
+}
+.step-card[data-locked="true"]{ opacity:.45; pointer-events:none; }
+.step-head{ display:flex; align-items:flex-start; gap:14px; margin-bottom:18px; }
+.step-num{
+  width:32px; height:32px; border-radius:9px; background:var(--surface-alt); color:var(--ink);
+  font-family:var(--font-mono); font-weight:600; font-size:14px; display:flex; align-items:center; justify-content:center; flex:none;
+  border:1px solid var(--border);
+}
+.step-head h2{ font-size:20px; }
+.step-head .step-sub{ margin:3px 0 0; color:var(--muted); font-size:13.5px; max-width:64ch; }
+
+.dropzone{
+  border:1.5px dashed var(--border); border-radius:12px; padding:30px 20px; text-align:center;
+  background:var(--surface-alt); cursor:pointer; transition:border-color .15s, background .15s;
+}
+.dropzone:hover, .dropzone.is-dragover{ border-color:var(--accent); background:var(--accent-soft); }
+.dropzone strong{ display:block; font-size:15px; margin-bottom:4px; }
+.dropzone span{ font-size:12.5px; color:var(--muted); }
+.dropzone input{ display:none; }
+.file-chip{
+  display:inline-flex; align-items:center; gap:8px; margin-top:14px; padding:7px 12px; border-radius:9px;
+  background:var(--accent-soft); color:var(--accent-strong); font-size:13px; font-family:var(--font-mono);
+}
+.field-row{ display:flex; flex-wrap:wrap; gap:16px; margin-top:16px; }
+.field{ display:flex; flex-direction:column; gap:5px; min-width:190px; flex:1; }
+.field label{ font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.02em; text-transform:uppercase; }
+select, input[type="text"], input[type="number"], input[type="month"]{
+  font-family:var(--font-body); font-size:13.5px; padding:9px 10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--surface); color:var(--ink); width:100%;
+}
+select:focus, input:focus, button:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+
+.table-wrap{ overflow-x:auto; border:1px solid var(--border); border-radius:10px; margin-top:14px; }
+table{ border-collapse:collapse; width:100%; font-size:13px; }
+thead th{
+  position:sticky; top:0; background:var(--surface-alt); text-align:left; padding:9px 10px; font-size:11.5px;
+  text-transform:uppercase; letter-spacing:.04em; color:var(--muted); border-bottom:1px solid var(--border); white-space:nowrap;
+}
+tbody td{ padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+tbody tr:last-child td{ border-bottom:none; }
+tbody tr:hover{ background:var(--surface-alt); }
+td.num{ text-align:right; }
+tr.is-negative td{ color:var(--danger); }
+
+button{ font-family:var(--font-body); cursor:pointer; border:none; border-radius:9px; font-weight:600; font-size:13.5px; }
+.btn-primary{ background:var(--accent); color:var(--accent-ink); padding:11px 20px; box-shadow:var(--shadow); }
+.btn-primary:disabled{ opacity:.45; cursor:not-allowed; box-shadow:none; }
+.btn-secondary{ background:var(--surface-alt); color:var(--ink); border:1px solid var(--border); padding:10px 16px; }
+.btn-ghost{ background:transparent; color:var(--muted); border:1px solid var(--border); padding:7px 10px; font-size:12px; }
+.btn-icon{ background:var(--surface-alt); border:1px solid var(--border); color:var(--ink); width:28px; height:28px; border-radius:7px; display:inline-flex; align-items:center; justify-content:center; padding:0; }
+.actions-row{ display:flex; flex-wrap:wrap; gap:12px; margin-top:18px; align-items:center; justify-content:space-between; }
+.hint{ font-size:12.5px; color:var(--muted); }
+.hint.warn{ color:var(--warning); }
+.hint.err{ color:var(--danger); }
+.hint.ok{ color:var(--success); font-weight:600; }
+
+.summary-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:6px; }
+.summary-tile{ background:var(--surface-alt); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+.summary-tile .n{ font-family:var(--font-mono); font-size:22px; font-weight:600; }
+.summary-tile .l{ font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin-top:2px; }
+.summary-tile.accent{ background:var(--accent-soft); }
+.summary-tile.accent .n{ color:var(--accent-strong); }
+.summary-tile.warn .n{ color:var(--warning); }
+
+.tag{ display:inline-flex; align-items:center; gap:5px; font-family:var(--font-mono); font-size:11.5px; font-weight:600; padding:4px 9px; border-radius:999px; white-space:nowrap; }
+.tag-debito{ background:var(--tag-debito-bg); color:var(--tag-debito-ink); }
+.tag-credito{ background:var(--tag-credito-bg); color:var(--tag-credito-ink); }
+
+.empty-state{ text-align:center; padding:34px 16px; color:var(--success); }
+.empty-state .big{ font-size:28px; }
+
+fieldset{ border:1px solid var(--border); border-radius:10px; padding:16px; margin:22px 0 0; }
+legend{ padding:0 6px; font-size:12.5px; font-weight:700; color:var(--accent-strong); text-transform:uppercase; letter-spacing:.03em; }
+
+.toast-host{ position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom,0px)); z-index:60; display:flex; flex-direction:column; gap:8px; max-width:min(360px, calc(100vw - 32px)); }
+.toast{ background:var(--ink); color:var(--bg); padding:11px 14px; border-radius:9px; font-size:13px; box-shadow:var(--shadow); animation:toast-in .18s ease-out; }
+.toast.toast-err{ background:var(--danger); color:#fff; }
+.toast.toast-ok{ background:var(--success); color:#08201b; }
+@keyframes toast-in{ from{ transform:translateY(6px); opacity:0; } to{ transform:none; opacity:1; } }
+
+code.k{ background:var(--surface-alt); border:1px solid var(--border); padding:1px 5px; border-radius:5px; font-family:var(--font-mono); font-size:12px; }
+
+.check-list{ display:flex; flex-direction:column; gap:10px; }
+.check-item{ border-radius:10px; padding:12px 14px; font-size:13px; display:flex; gap:10px; align-items:flex-start; }
+.check-item.ok{ background:var(--success-soft); color:var(--success); }
+.check-item.warn{ background:var(--warning-soft); color:var(--warning); }
+.check-item.err{ background:var(--danger-soft); color:var(--danger); }
+</style>
+</head>
+<body>
+<div class="app-shell">
+
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-mark">PC</div>
+        <div>
+          <h1>Importação PIS/COFINS</h1>
+          <p>Beija Flor — geração automática dos lançamentos contábeis a partir da apuração do mês</p>
+        </div>
+      </div>
+      <div class="steps-pills">
+        <span class="step-pill" id="pill-1">1 · Apuração</span>
+        <span class="step-pill" id="pill-2">2 · Dados e ERP</span>
+        <span class="step-pill" id="pill-3">3 · Resumo</span>
+        <span class="step-pill" id="pill-4">4 · Validação</span>
+        <span class="step-pill" id="pill-5">5 · Lançamentos</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="step-head">
+      <div class="step-num">1</div>
+      <div>
+        <h2>Planilha de apuração do mês</h2>
+        <p class="step-sub">Importe o arquivo com as abas "Apuração" e "Balancete" (ex: PLANILHA BEIJA FLOR - PIS COFINS - NÃO CUMULATIVO).</p>
+      </div>
+    </div>
+
+    <div class="dropzone" id="dz-apuracao">
+      <input type="file" id="file-apuracao" accept=".xlsx,.xls">
+      <strong>Clique ou arraste aqui a planilha de apuração (.xlsx)</strong>
+      <span>Ela precisa ter as abas "Apuração" e, se possível, "Balancete".</span>
+      <div id="chip-apuracao"></div>
+    </div>
+
+    <div id="bloco-balancete-extra" style="display:none; margin-top:18px;">
+      <p class="hint warn">Não encontrei a aba "Balancete" dentro dessa planilha. Se ela estiver em outro arquivo, importe abaixo (opcional) — senão, preencha os 4 campos do saldo do ERP manualmente na etapa 2.</p>
+      <div class="dropzone" id="dz-balancete">
+        <input type="file" id="file-balancete" accept=".xlsx,.xls">
+        <strong>Clique ou arraste aqui o balancete (opcional)</strong>
+        <span>Usado só para os 4 saldos de PIS/COFINS a Recuperar e a Recolher.</span>
+        <div id="chip-balancete"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-card" id="card-dados-gerais" data-locked="true">
+    <div class="step-head">
+      <div class="step-num">2</div>
+      <div>
+        <h2>Dados do lançamento e saldos já lançados pelo ERP</h2>
+        <p class="step-sub">Confirme o período e o código da empresa, e confira os saldos que o ERP já lançou no mês (usados para não duplicar valor nas linhas de Compras e Vendas).</p>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="input-periodo">Período de apuração</label>
+        <input type="month" id="input-periodo">
+        <span class="hint" id="hint-periodo">Detectado automaticamente da planilha de apuração.</span>
+      </div>
+      <div class="field">
+        <label for="input-empresa">Código empresa</label>
+        <input type="number" id="input-empresa" value="1">
+        <span class="hint">Usado na coluna "CÓDIGO EMPRESA*" do arquivo de importação.</span>
+      </div>
+    </div>
+
+    <fieldset>
+      <legend>Saldos já lançados pelo ERP no mês (contas a recuperar / a recolher)</legend>
+      <div class="field-row">
+        <div class="field">
+          <label for="input-pis-recuperar">PIS a Recuperar — Mov. Débito (R$)</label>
+          <input type="number" step="0.01" id="input-pis-recuperar" value="0">
+          <span class="hint" id="hint-pis-recuperar">Preencha manualmente ou importe o balancete.</span>
+        </div>
+        <div class="field">
+          <label for="input-cofins-recuperar">COFINS a Recuperar — Mov. Débito (R$)</label>
+          <input type="number" step="0.01" id="input-cofins-recuperar" value="0">
+          <span class="hint" id="hint-cofins-recuperar">Preencha manualmente ou importe o balancete.</span>
+        </div>
+        <div class="field">
+          <label for="input-pis-recolher">PIS a Recolher — Mov. Crédito (R$)</label>
+          <input type="number" step="0.01" id="input-pis-recolher" value="0">
+          <span class="hint" id="hint-pis-recolher">Preencha manualmente ou importe o balancete.</span>
+        </div>
+        <div class="field">
+          <label for="input-cofins-recolher">COFINS a Recolher — Mov. Crédito (R$)</label>
+          <input type="number" step="0.01" id="input-cofins-recolher" value="0">
+          <span class="hint" id="hint-cofins-recolher">Preencha manualmente ou importe o balancete.</span>
+        </div>
+      </div>
+    </fieldset>
+  </div>
+
+  <div class="step-card" id="card-resumo" data-locked="true">
+    <div class="step-head">
+      <div class="step-num">3</div>
+      <div>
+        <h2>Resumo da apuração detectada</h2>
+        <p class="step-sub">Totais lidos direto da aba Apuração, antes de aplicar os saldos do ERP.</p>
+      </div>
+    </div>
+    <div class="summary-grid">
+      <div class="summary-tile accent"><div class="n mono" id="sum-cred-pis">-</div><div class="l">Total crédito PIS</div></div>
+      <div class="summary-tile accent"><div class="n mono" id="sum-cred-cofins">-</div><div class="l">Total crédito COFINS</div></div>
+      <div class="summary-tile"><div class="n mono" id="sum-deb-pis">-</div><div class="l">Total débito PIS</div></div>
+      <div class="summary-tile"><div class="n mono" id="sum-deb-cofins">-</div><div class="l">Total débito COFINS</div></div>
+    </div>
+  </div>
+
+  <div class="step-card" id="card-validacao" data-locked="true">
+    <div class="step-head">
+      <div class="step-num">4</div>
+      <div>
+        <h2>Validação</h2>
+        <p class="step-sub">Conferência automática antes de gerar o arquivo.</p>
+      </div>
+    </div>
+    <div id="validacao-conteudo"></div>
+  </div>
+
+  <div class="step-card" id="card-preview" data-locked="true">
+    <div class="step-head">
+      <div class="step-num">5</div>
+      <div>
+        <h2>Lançamentos gerados</h2>
+        <p class="step-sub">Confira as 22 linhas antes de baixar a planilha de importação.</p>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Natureza</th>
+            <th>Conta débito</th>
+            <th>Conta crédito</th>
+            <th>Histórico</th>
+            <th>Complemento</th>
+            <th style="text-align:right;">Valor lançamento</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-preview"></tbody>
+      </table>
+    </div>
+
+    <div class="actions-row">
+      <span class="hint mono" id="nome-arquivo-preview"></span>
+      <button class="btn-primary" id="btn-baixar">Baixar planilha de importação (.xlsx)</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast-host" id="toast-host"></div>
+
+<script>
+(function(){
+  if (window.top === window.self) return;
+  if (window.claude && window.claude.use) return;
+  let proximoId = 1;
+  const pendentes = {};
+  window.addEventListener('message', (ev) => {
+    const msg = ev.data;
+    if (!msg || msg.__ponteClaude !== true || msg.tipo !== 'resposta') return;
+    const p = pendentes[msg.id];
+    if (!p) return;
+    delete pendentes[msg.id];
+    if (msg.erro) p.reject(msg.erro); else p.resolve(msg.resultado);
+  });
+  function chamarHub(acao, payload){
+    return new Promise((resolve, reject) => {
+      const id = proximoId++;
+      pendentes[id] = { resolve, reject };
+      window.parent.postMessage({ __ponteClaude: true, tipo: 'chamada', id, acao, payload }, '*');
+    });
+  }
+  window.claude = {
+    use: async (nome) => {
+      if (nome !== 'downloads') return null;
+      return { save: (req) => chamarHub('downloads.save', req) };
+    }
+  };
+})();
+
+async function salvarArquivo(filename, blob){
+  if (typeof window.claude !== 'undefined' && typeof window.claude.use === 'function'){
+    try{
+      const downloads = await window.claude.use('downloads');
+      if (downloads){ await downloads.save({ filename, data: blob }); return true; }
+    }catch(err){
+      showToast('Não foi possível salvar o arquivo (' + (err && (err.code || err.message) || 'erro') + ').', 'err');
+      return false;
+    }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  return true;
+}
+
+// ---------- toasts ----------
+function showToast(msg, type){
+  const host = document.getElementById('toast-host');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type === 'err' ? ' toast-err' : type === 'ok' ? ' toast-ok' : '');
+  el.textContent = msg;
+  host.appendChild(el);
+  setTimeout(() => el.remove(), 5000);
+}
+
+// ---------- utilidades ----------
+function normalize(str){
+  return (str || '').toString()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Usado só para valores digitados em campos <input type="number"> (formato JS: ponto decimal).
+// Não usar em células de planilha, que passam por toNumber() para aceitar formato BR.
+function inputNum(id){
+  const v = parseFloat(document.getElementById(id).value);
+  return isNaN(v) ? 0 : v;
+}
+
+function toNumber(v){
+  if (v === null || v === undefined || v === '') return 0;
+  if (typeof v === 'number') return v;
+  const n = parseFloat(String(v).replace(/\./g,'').replace(',', '.'));
+  return isNaN(n) ? 0 : n;
+}
+
+function round2(v){
+  return Math.round((v + Number.EPSILON) * 100) / 100;
+}
+
+function fmtBRL(v){
+  return (v || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+}
+
+function sheetToMatrix(ws){
+  return XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true});
+}
+
+function findSheetByName(wb, wanted){
+  const target = normalize(wanted);
+  let name = wb.SheetNames.find(n => normalize(n) === target);
+  if (!name) name = wb.SheetNames.find(n => normalize(n).includes(target));
+  return name ? wb.Sheets[name] : null;
+}
+
+// ---------- parsing da aba Apuração ----------
+function parseApuracao(matrix){
+  const result = {
+    periodo: null,
+    totalCredPIS: 0, totalCredCOFINS: 0,
+    totalDebPIS: 0, totalDebCOFINS: 0,
+    fretePIS:0, freteCOFINS:0,
+    energiaPIS:0, energiaCOFINS:0,
+    freteTransfPIS:0, freteTransfCOFINS:0,
+    aluguelPIS:0, aluguelCOFINS:0,
+    servFretePIS:0, servFreteCOFINS:0,
+    devComprasPIS:0, devComprasCOFINS:0,
+    recFinPIS:0, recFinCOFINS:0,
+    outrosPIS:0, outrosCOFINS:0,
+    avisos: []
+  };
+
+  // período
+  for (const row of matrix){
+    for (const cell of (row||[])){
+      if (typeof cell === 'string' && normalize(cell).includes('PERIODO')){
+        const m = cell.match(/(\d{1,2})[\/\-](\d{4})/);
+        if (m){ result.periodo = {mes: parseInt(m[1],10), ano: parseInt(m[2],10)}; }
+      }
+    }
+    if (result.periodo) break;
+  }
+
+  function findHeaderCol(row){
+    for (let c=0;c<row.length;c++){
+      if (normalize(row[c]) === 'CONTA CONTABIL') return c;
+    }
+    return -1;
+  }
+
+  function rowLabel(row){
+    return normalize((row && row[0]) || '');
+  }
+
+  // localizar blocos por texto, na ordem em que aparecem
+  let i = 0;
+  let block = null; // 'debito' | 'credito' | 'essencialidade'
+  let colConta = -1, colNome = -1, colT1 = -1, colT2 = -1;
+  let creditoTotalCount = 0;
+
+  while (i < matrix.length){
+    const row = matrix[i] || [];
+    const label = rowLabel(row);
+
+    if (label.includes('COMPOSICAO DO DEBITO') && !label.includes('TOTAL')){
+      block = 'debito';
+      i++;
+      continue;
+    }
+    if (label.includes('COMPOSICAO DO CREDITO') && !label.includes('CONCEITO') && !label.includes('TOTAL')){
+      block = 'credito';
+      i++;
+      continue;
+    }
+    if (label.includes('CONCEITO ESTENDIDO')){
+      block = 'essencialidade';
+      i++;
+      continue;
+    }
+
+    if ((block === 'debito' || block === 'credito' || block === 'essencialidade')){
+      const hc = findHeaderCol(row);
+      if (hc >= 0){
+        colConta = hc;
+        colNome = hc + 2;
+        colT1 = hc + 5;
+        colT2 = hc + 7;
+        i++;
+        continue;
+      }
+    }
+
+    if (block && colConta >= 0){
+      const isTotalDeb = label.includes('TOTAL COMPOSICAO DO DEBITO');
+      const isTotalCred = label.includes('TOTAL COMPOSICAO DO CREDITO');
+
+      if (block === 'debito' && isTotalDeb){
+        result.totalDebPIS = toNumber(row[colT1]);
+        result.totalDebCOFINS = toNumber(row[colT2]);
+        block = null;
+        i++;
+        continue;
+      }
+      if (block === 'credito' && isTotalCred){
+        result.totalCredPIS = toNumber(row[colT1]);
+        result.totalCredCOFINS = toNumber(row[colT2]);
+        creditoTotalCount++;
+        block = null;
+        i++;
+        continue;
+      }
+      if (block === 'essencialidade' && isTotalCred){
+        result.outrosPIS = toNumber(row[colT1]);
+        result.outrosCOFINS = toNumber(row[colT2]);
+        creditoTotalCount++;
+        block = null;
+        i++;
+        continue;
+      }
+
+      const nome = normalize(row[colNome]);
+      const t1 = toNumber(row[colT1]);
+      const t2 = toNumber(row[colT2]);
+
+      if (nome && nome !== '-'){
+        if (block === 'debito'){
+          if (nome.includes('DEVOLU') && nome.includes('COMPRA')){
+            result.devComprasPIS += t1; result.devComprasCOFINS += t2;
+          } else if ((nome.includes('DESCONTO') && nome.includes('OBTID')) ||
+                     (nome.includes('JUROS') && nome.includes('MORA')) ||
+                     (nome.includes('RENDIMENTO') && nome.includes('APLICA'))){
+            result.recFinPIS += t1; result.recFinCOFINS += t2;
+          }
+          // demais linhas (vendas, ICMS, baixa de estoque etc.) compõem o "plug" de vendas
+        } else if (block === 'credito'){
+          if (nome.includes('TRANSF')){
+            result.freteTransfPIS += t1; result.freteTransfCOFINS += t2;
+          } else if (nome.includes('SERVICO') && nome.includes('FRETE')){
+            result.servFretePIS += t1; result.servFreteCOFINS += t2;
+          } else if (nome.includes('ALUGUEL')){
+            result.aluguelPIS += t1; result.aluguelCOFINS += t2;
+          } else if (nome.includes('ENERGIA')){
+            result.energiaPIS += t1; result.energiaCOFINS += t2;
+          } else if (nome.includes('FRETE')){
+            result.fretePIS += t1; result.freteCOFINS += t2;
+          }
+          // demais linhas (compras, perdas, depreciação acelerada etc.) compõem o "plug" de compras
+        }
+        // bloco essencialidade: não somamos linha a linha, usamos o total impresso
+      }
+    }
+    i++;
+  }
+
+  if (!result.periodo) result.avisos.push({tipo:'warn', texto:'Não consegui detectar o período (mês/ano) na planilha. Informe manualmente.'});
+  if (!result.totalDebPIS && !result.totalDebCOFINS) result.avisos.push({tipo:'err', texto:'Não encontrei o total da "COMPOSIÇÃO DO DÉBITO" na aba Apuração.'});
+  if (creditoTotalCount < 2) result.avisos.push({tipo:'err', texto:'Não encontrei os dois totais de crédito esperados (crédito principal + crédito de essencialidade/relevância) na aba Apuração.'});
+
+  return result;
+}
+
+// ---------- parsing do Balancete ----------
+function parseBalancete(matrix){
+  const contas = {
+    '1.1.3.02.0003': {campo:'pisRecuperar', coluna:'debito'},
+    '1.1.3.02.0004': {campo:'cofinsRecuperar', coluna:'debito'},
+    '2.1.3.01.0004': {campo:'pisRecolher', coluna:'credito'},
+    '2.1.3.01.0005': {campo:'cofinsRecolher', coluna:'credito'}
+  };
+  const nomesFallback = {
+    'PIS A RECUPERAR': {campo:'pisRecuperar', coluna:'debito'},
+    'COFINS A RECUPERAR': {campo:'cofinsRecuperar', coluna:'debito'},
+    'PIS A RECOLHER': {campo:'pisRecolher', coluna:'credito'},
+    'COFINS A RECOLHER': {campo:'cofinsRecolher', coluna:'credito'}
+  };
+
+  const out = {};
+  let colClassif = -1, colNome = -1, colMovDeb = -1, colMovCred = -1;
+
+  for (const row of matrix){
+    for (let c=0;c<row.length;c++){
+      const v = normalize(row[c]);
+      if (v === 'CLASSIF.' || v === 'CLASSIF') colClassif = c;
+      if (v.includes('MOV') && v.includes('DEBITO')) colMovDeb = c;
+      if (v.includes('MOV') && v.includes('CREDITO')) colMovCred = c;
+      if (v === 'NOME DA CONTA') colNome = c;
+    }
+    if (colClassif >= 0 && colMovDeb >= 0 && colMovCred >= 0) break;
+  }
+
+  if (colClassif < 0 || colMovDeb < 0 || colMovCred < 0) return out;
+
+  for (const row of matrix){
+    const classif = (row[colClassif] || '').toString().trim();
+    const nome = normalize(colNome >= 0 ? row[colNome] : '');
+    let alvo = contas[classif];
+    if (!alvo){
+      for (const chave in nomesFallback){
+        if (nome.includes(chave)) { alvo = nomesFallback[chave]; break; }
+      }
+    }
+    if (alvo){
+      const valor = alvo.coluna === 'debito' ? toNumber(row[colMovDeb]) : toNumber(row[colMovCred]);
+      out[alvo.campo] = valor;
+    }
+  }
+  return out;
+}
+
+// ---------- estado ----------
+const estado = {
+  apuracao: null,
+  balancete: {}
+};
+
+const rowsDef = [
+  {natureza:'credito', historico:130, deb:'113020003', cred:'114010006', complemento:'CREDITO PIS COMPRAS', key:'creditoComprasPIS'},
+  {natureza:'credito', historico:130, deb:'313020998', cred:'113020003', complemento:'CREDITO PIS FRETES', key:'fretePIS'},
+  {natureza:'credito', historico:130, deb:'113020003', cred:'313020998', complemento:'CREDITO PIS ENERGIA ELETRICA', key:'energiaPIS'},
+  {natureza:'credito', historico:130, deb:'113020003', cred:'313020998', complemento:'CREDITO PIS FRETE TRANSF LOJAS', key:'freteTransfPIS'},
+  {natureza:'credito', historico:130, deb:'113020003', cred:'313020998', complemento:'CREDITO PIS ALUGUEL', key:'aluguelPIS'},
+  {natureza:'credito', historico:130, deb:'113020003', cred:'313020998', complemento:'CREDITO PIS SERVICO FRETE', key:'servFretePIS'},
+  {natureza:'debito', historico:131, deb:'311020004', cred:'213010004', complemento:'DEBITO PIS VENDAS', key:'debitoVendasPIS'},
+  {natureza:'debito', historico:131, deb:'315010008', cred:'213010004', complemento:'DEBITO PIS REC. FINANCEIRA', key:'recFinPIS'},
+  {natureza:'debito', historico:131, deb:'114010003', cred:'213010004', complemento:'DEBITO PIS DEV. COMPRAS', key:'devComprasPIS'},
+  {natureza:'credito', historico:129, deb:'113020004', cred:'114010007', complemento:'CREDITO COFINS COMPRAS', key:'creditoComprasCOFINS'},
+  {natureza:'credito', historico:129, deb:'313020999', cred:'113020004', complemento:'CREDITO COFINS FRETES', key:'freteCOFINS'},
+  {natureza:'credito', historico:129, deb:'113020004', cred:'313020999', complemento:'CREDITO COFINS ENERGIA ELETRICA', key:'energiaCOFINS'},
+  {natureza:'credito', historico:129, deb:'113020004', cred:'313020999', complemento:'CREDITO COFINS FRETE TRANSF LOJAS', key:'freteTransfCOFINS'},
+  {natureza:'credito', historico:129, deb:'113020004', cred:'313020999', complemento:'CREDITO COFINS ALUGUEL', key:'aluguelCOFINS'},
+  {natureza:'credito', historico:129, deb:'113020004', cred:'313020999', complemento:'CREDITO COFINS SERVICO FRETE', key:'servFreteCOFINS'},
+  {natureza:'debito', historico:132, deb:'311020005', cred:'213010005', complemento:'DEBITO COFINS VENDAS', key:'debitoVendasCOFINS'},
+  {natureza:'debito', historico:132, deb:'315010009', cred:'213010005', complemento:'DEBITO COFINS REC. FINANCEIRA', key:'recFinCOFINS'},
+  {natureza:'debito', historico:132, deb:'114010003', cred:'213010005', complemento:'DEBITO COFINS DEV. COMPRAS', key:'devComprasCOFINS'},
+  {natureza:'credito', historico:130, deb:'113020003', cred:'313020998', complemento:'CREDITO PIS - OUTROS', key:'outrosPIS'},
+  {natureza:'credito', historico:129, deb:'113020004', cred:'313020999', complemento:'CREDITO COFINS - OUTROS', key:'outrosCOFINS'},
+  {natureza:'debito', historico:182, deb:'213010004', cred:'113020003', complemento:'COMPENSACAO PIS CONF APURACAO', key:'compensacaoPIS'},
+  {natureza:'debito', historico:182, deb:'213010005', cred:'113020004', complemento:'COMPENSACAO COFINS CONF APURACAO', key:'compensacaoCOFINS'}
+];
+
+function getErpValores(){
+  return {
+    pisRecuperar: inputNum('input-pis-recuperar'),
+    cofinsRecuperar: inputNum('input-cofins-recuperar'),
+    pisRecolher: inputNum('input-pis-recolher'),
+    cofinsRecolher: inputNum('input-cofins-recolher')
+  };
+}
+
+function calcularValores(ap, erp){
+  const v = {};
+  v.fretePIS = ap.fretePIS; v.freteCOFINS = ap.freteCOFINS;
+  v.energiaPIS = ap.energiaPIS; v.energiaCOFINS = ap.energiaCOFINS;
+  v.freteTransfPIS = ap.freteTransfPIS; v.freteTransfCOFINS = ap.freteTransfCOFINS;
+  v.aluguelPIS = ap.aluguelPIS; v.aluguelCOFINS = ap.aluguelCOFINS;
+  v.servFretePIS = ap.servFretePIS; v.servFreteCOFINS = ap.servFreteCOFINS;
+  v.devComprasPIS = ap.devComprasPIS; v.devComprasCOFINS = ap.devComprasCOFINS;
+  v.recFinPIS = ap.recFinPIS; v.recFinCOFINS = ap.recFinCOFINS;
+  v.outrosPIS = ap.outrosPIS; v.outrosCOFINS = ap.outrosCOFINS;
+
+  const outrosCredPIS = v.fretePIS + v.energiaPIS + v.freteTransfPIS + v.aluguelPIS + v.servFretePIS + v.outrosPIS;
+  const outrosCredCOFINS = v.freteCOFINS + v.energiaCOFINS + v.freteTransfCOFINS + v.aluguelCOFINS + v.servFreteCOFINS + v.outrosCOFINS;
+
+  v.creditoComprasPIS = ap.totalCredPIS - outrosCredPIS - erp.pisRecuperar;
+  v.creditoComprasCOFINS = ap.totalCredCOFINS - outrosCredCOFINS - erp.cofinsRecuperar;
+
+  v.debitoVendasPIS = ap.totalDebPIS - v.devComprasPIS - v.recFinPIS - erp.pisRecolher;
+  v.debitoVendasCOFINS = ap.totalDebCOFINS - v.devComprasCOFINS - v.recFinCOFINS - erp.cofinsRecolher;
+
+  v.compensacaoPIS = ap.totalDebPIS;
+  v.compensacaoCOFINS = ap.totalDebCOFINS;
+
+  for (const k in v) v[k] = round2(v[k]);
+  return v;
+}
+
+function lastDayOfMonth(ano, mes){
+  return new Date(ano, mes, 0);
+}
+
+// Converte uma data (dia/mês/ano local) para o número serial de data do Excel,
+// gravando a célula como número formatado (mais confiável na exportação do que
+// deixar a biblioteca converter um objeto Date na hora de gravar o .xlsx).
+function dateToExcelSerial(date){
+  const utcDate = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const excelEpoch = Date.UTC(1899, 11, 30);
+  return Math.round((utcDate - excelEpoch) / 86400000);
+}
+
+function setPill(id, cls){
+  const el = document.getElementById(id);
+  el.classList.remove('is-active','is-done');
+  if (cls) el.classList.add(cls);
+}
+
+function render(){
+  if (!estado.apuracao) return;
+  const ap = estado.apuracao;
+  const erp = getErpValores();
+  const valores = calcularValores(ap, erp);
+
+  document.getElementById('sum-cred-pis').textContent = fmtBRL(ap.totalCredPIS);
+  document.getElementById('sum-cred-cofins').textContent = fmtBRL(ap.totalCredCOFINS);
+  document.getElementById('sum-deb-pis').textContent = fmtBRL(ap.totalDebPIS);
+  document.getElementById('sum-deb-cofins').textContent = fmtBRL(ap.totalDebCOFINS);
+
+  // validações
+  const validacoes = [];
+  ap.avisos.forEach(a => validacoes.push(a));
+
+  const somaCredPIS = round2(valores.creditoComprasPIS + valores.fretePIS + valores.energiaPIS + valores.freteTransfPIS + valores.aluguelPIS + valores.servFretePIS + valores.outrosPIS);
+  const somaCredCOFINS = round2(valores.creditoComprasCOFINS + valores.freteCOFINS + valores.energiaCOFINS + valores.freteTransfCOFINS + valores.aluguelCOFINS + valores.servFreteCOFINS + valores.outrosCOFINS);
+  const somaDebPIS = round2(valores.debitoVendasPIS + valores.recFinPIS + valores.devComprasPIS);
+  const somaDebCOFINS = round2(valores.debitoVendasCOFINS + valores.recFinCOFINS + valores.devComprasCOFINS);
+
+  // Por construção, a linha de Compras/Vendas já é reduzida pelo valor do ERP (para não duplicar),
+  // então a soma das linhas geradas + o valor do ERP correspondente é que deve bater com o total apurado.
+  if (Math.abs((somaCredPIS + erp.pisRecuperar) - round2(ap.totalCredPIS)) > 0.05) validacoes.push({tipo:'err', texto:'A soma das linhas de crédito PIS geradas (mais o valor de PIS a Recuperar do ERP) não bate com o total apurado na planilha. Confira se a aba Apuração tem alguma conta de crédito com nome muito diferente do esperado.'});
+  if (Math.abs((somaCredCOFINS + erp.cofinsRecuperar) - round2(ap.totalCredCOFINS)) > 0.05) validacoes.push({tipo:'err', texto:'A soma das linhas de crédito COFINS geradas (mais o valor de COFINS a Recuperar do ERP) não bate com o total apurado na planilha. Confira se a aba Apuração tem alguma conta de crédito com nome muito diferente do esperado.'});
+  if (Math.abs((somaDebPIS + erp.pisRecolher) - round2(ap.totalDebPIS)) > 0.05) validacoes.push({tipo:'err', texto:'A soma das linhas de débito PIS geradas (mais o valor de PIS a Recolher do ERP) não bate com o total apurado na planilha. Confira se a aba Apuração tem alguma conta de débito com nome muito diferente do esperado.'});
+  if (Math.abs((somaDebCOFINS + erp.cofinsRecolher) - round2(ap.totalDebCOFINS)) > 0.05) validacoes.push({tipo:'err', texto:'A soma das linhas de débito COFINS geradas (mais o valor de COFINS a Recolher do ERP) não bate com o total apurado na planilha. Confira se a aba Apuração tem alguma conta de débito com nome muito diferente do esperado.'});
+
+  const negativos = rowsDef.filter(r => valores[r.key] < 0);
+  if (negativos.length){
+    validacoes.push({tipo:'warn', texto:'Há ' + negativos.length + ' linha(s) com valor negativo (' + negativos.map(r=>r.complemento).join(', ') + '). Confira os valores informados de saldo do ERP.'});
+  }
+
+  if (erp.pisRecuperar === 0 && erp.cofinsRecuperar === 0 && erp.pisRecolher === 0 && erp.cofinsRecolher === 0){
+    validacoes.push({tipo:'warn', texto:'Os 4 saldos do ERP (a recuperar/a recolher) estão zerados. Confirme se isso está correto ou preencha os campos da etapa 2.'});
+  }
+
+  const conteudo = document.getElementById('validacao-conteudo');
+  if (!validacoes.length){
+    conteudo.innerHTML = '<div class="empty-state"><div class="big">✅</div>Todas as validações internas passaram: as linhas geradas batem com os totais da apuração.</div>';
+  } else {
+    const lista = document.createElement('div');
+    lista.className = 'check-list';
+    validacoes.forEach(v => {
+      const div = document.createElement('div');
+      div.className = 'check-item ' + v.tipo;
+      div.textContent = v.texto;
+      lista.appendChild(div);
+    });
+    conteudo.innerHTML = '';
+    conteudo.appendChild(lista);
+  }
+
+  // preview
+  const tbody = document.getElementById('tbody-preview');
+  tbody.innerHTML = '';
+  rowsDef.forEach(r => {
+    const tr = document.createElement('tr');
+    if (valores[r.key] < 0) tr.className = 'is-negative';
+    const tagClass = r.natureza === 'credito' ? 'tag-credito' : 'tag-debito';
+    const tagLabel = r.natureza === 'credito' ? 'CRÉDITO' : 'DÉBITO';
+    tr.innerHTML =
+      '<td><span class="tag ' + tagClass + '">' + tagLabel + '</span></td>' +
+      '<td class="mono">' + r.deb + '</td>' +
+      '<td class="mono">' + r.cred + '</td>' +
+      '<td class="mono">' + r.historico + '</td>' +
+      '<td>' + r.complemento + '</td>' +
+      '<td class="num mono">' + fmtBRL(valores[r.key]) + '</td>';
+    tbody.appendChild(tr);
+  });
+
+  const periodoStr = document.getElementById('input-periodo').value;
+  let nomeArquivo = 'Importação PIS-COFINS.xlsx';
+  if (periodoStr){
+    const [ano, mes] = periodoStr.split('-');
+    nomeArquivo = 'Importação PIS-COFINS ' + mes + ano + '.xlsx';
+  }
+  document.getElementById('nome-arquivo-preview').textContent = nomeArquivo;
+
+  estado.valoresAtuais = valores;
+  estado.nomeArquivoAtual = nomeArquivo;
+
+  // etapas 3, 4 e 5 ficam concluídas assim que há cálculo
+  setPill('pill-3', 'is-done');
+  setPill('pill-4', 'is-done');
+  setPill('pill-5', 'is-done');
+}
+
+function gerarWorkbook(valores, nomeArquivo){
+  const periodoStr = document.getElementById('input-periodo').value;
+  const [anoStr, mesStr] = periodoStr ? periodoStr.split('-') : [null, null];
+  const codigoEmpresa = inputNum('input-empresa') || 1;
+
+  let dataLancamento = new Date();
+  if (anoStr && mesStr){
+    dataLancamento = lastDayOfMonth(parseInt(anoStr,10), parseInt(mesStr,10));
+  }
+  const serialData = dateToExcelSerial(dataLancamento);
+
+  const header = ['CÓDIGO EMPRESA*','DATA LANÇAMENTO*','CONTA DEBITO','CONTA CREDITO','CÓDIGO HISTÓRICO PADRÃO','COMPLEMENTO','VALOR LANÇAMENTO*','CENTRO CUSTO DEBITO','CENTRO CUSTO CREDITO','CÓDIGO AGRUPADOR'];
+  const rows = rowsDef.map(r => [
+    codigoEmpresa,
+    null, // data preenchida abaixo diretamente como número serial + formato dd/mm/yyyy
+    r.deb,
+    r.cred,
+    r.historico,
+    r.complemento,
+    valores[r.key],
+    null, null, null
+  ]);
+
+  const aoa = [header, ...rows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+  // grava a coluna B (DATA LANÇAMENTO) como número serial de data do Excel,
+  // com o formato dd/mm/yyyy aplicado na própria célula — mais confiável na
+  // exportação do que gravar um objeto Date e depender da conversão automática.
+  for (let i = 0; i < rows.length; i++){
+    const cellRef = XLSX.utils.encode_cell({r: i+1, c: 1});
+    ws[cellRef] = {t:'n', v: serialData, z:'dd/mm/yyyy'};
+  }
+  if (!ws['!ref']){
+    ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0}, e:{r:rows.length, c:9}});
+  }
+
+  ws['!cols'] = [
+    {wch:14},{wch:14},{wch:14},{wch:14},{wch:12},{wch:34},{wch:16},{wch:14},{wch:14},{wch:14}
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Planilha1');
+  return wb;
+}
+
+// ---------- eventos de UI ----------
+function setupDropzone(dzId, inputId, onFile){
+  const dz = document.getElementById(dzId);
+  const input = document.getElementById(inputId);
+  dz.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => { if (input.files[0]) onFile(input.files[0]); });
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('is-dragover'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('is-dragover'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('is-dragover');
+    if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]);
+  });
+}
+
+function aplicarBalancete(dados, origem){
+  const campos = [
+    {id:'pis-recuperar', campo:'pisRecuperar'},
+    {id:'cofins-recuperar', campo:'cofinsRecuperar'},
+    {id:'pis-recolher', campo:'pisRecolher'},
+    {id:'cofins-recolher', campo:'cofinsRecolher'}
+  ];
+  campos.forEach(c => {
+    const input = document.getElementById('input-' + c.id);
+    const hint = document.getElementById('hint-' + c.id);
+    if (dados[c.campo] !== undefined){
+      input.value = dados[c.campo];
+      hint.textContent = '🔎 valor encontrado automaticamente (' + origem + ').';
+      hint.className = 'hint ok';
+    } else {
+      hint.textContent = '✏️ não encontrado automaticamente — preencha manualmente.';
+      hint.className = 'hint warn';
+    }
+  });
+}
+
+function desbloquearEtapas(){
+  ['card-dados-gerais','card-resumo','card-validacao','card-preview'].forEach(id => {
+    document.getElementById(id).removeAttribute('data-locked');
+  });
+  setPill('pill-1', 'is-done');
+  setPill('pill-2', 'is-active');
+}
+
+function processarApuracaoWorkbook(wb){
+  const wsApuracao = findSheetByName(wb, 'Apuração') || findSheetByName(wb, 'Apuracao');
+  if (!wsApuracao){
+    showToast('Não encontrei a aba "Apuração" dentro dessa planilha.', 'err');
+    return;
+  }
+  const matrizApuracao = sheetToMatrix(wsApuracao);
+  const ap = parseApuracao(matrizApuracao);
+  estado.apuracao = ap;
+
+  if (ap.periodo){
+    const mm = String(ap.periodo.mes).padStart(2,'0');
+    document.getElementById('input-periodo').value = ap.periodo.ano + '-' + mm;
+    document.getElementById('hint-periodo').textContent = 'Detectado automaticamente da planilha de apuração.';
+    document.getElementById('hint-periodo').className = 'hint ok';
+  }
+
+  const wsBalancete = findSheetByName(wb, 'Balancete');
+  if (wsBalancete){
+    document.getElementById('bloco-balancete-extra').style.display = 'none';
+    const dadosBal = parseBalancete(sheetToMatrix(wsBalancete));
+    estado.balancete = dadosBal;
+    aplicarBalancete(dadosBal, 'aba Balancete deste arquivo');
+  } else {
+    document.getElementById('bloco-balancete-extra').style.display = 'block';
+  }
+
+  desbloquearEtapas();
+  render();
+  showToast('Planilha de apuração importada com sucesso.', 'ok');
+}
+
+function processarBalanceteWorkbook(wb){
+  const ws = findSheetByName(wb, 'Balancete') || wb.Sheets[wb.SheetNames[0]];
+  const dados = parseBalancete(sheetToMatrix(ws));
+  estado.balancete = dados;
+  aplicarBalancete(dados, 'arquivo de balancete importado');
+  render();
+}
+
+setupDropzone('dz-apuracao', 'file-apuracao', file => {
+  document.getElementById('chip-apuracao').innerHTML = '<span class="file-chip">📄 ' + file.name + '</span>';
+  const reader = new FileReader();
+  reader.onload = e => {
+    const data = new Uint8Array(e.target.result);
+    const wb = XLSX.read(data, {type:'array', cellDates:false});
+    processarApuracaoWorkbook(wb);
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+setupDropzone('dz-balancete', 'file-balancete', file => {
+  document.getElementById('chip-balancete').innerHTML = '<span class="file-chip">📄 ' + file.name + '</span>';
+  const reader = new FileReader();
+  reader.onload = e => {
+    const data = new Uint8Array(e.target.result);
+    const wb = XLSX.read(data, {type:'array', cellDates:false});
+    processarBalanceteWorkbook(wb);
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+['input-pis-recuperar','input-cofins-recuperar','input-pis-recolher','input-cofins-recolher','input-empresa','input-periodo'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => render());
+});
+
+document.getElementById('btn-baixar').addEventListener('click', async () => {
+  if (!estado.apuracao) return;
+  const valores = estado.valoresAtuais;
+  const nomeArquivo = estado.nomeArquivoAtual || 'Importação PIS-COFINS.xlsx';
+  const wb = gerarWorkbook(valores, nomeArquivo);
+  const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+  const blob = new Blob([wbout], {type:'application/octet-stream'});
+  const ok = await salvarArquivo(nomeArquivo, blob);
+  if (ok) showToast('Arquivo gerado: ' + nomeArquivo, 'ok');
+});
+
+setPill('pill-1', 'is-active');
+</script>
+</body>
+</html>

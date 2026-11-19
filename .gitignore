@@ -1,0 +1,16 @@
+# Dados de clientes: NUNCA publicar
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+*.pdf
+*.txt
+*.zip
+*.ofx
+Claude outputs/
+
+# Dependencias e temporarios
+node_modules/
+~$*
+.DS_Store
+Thumbs.db

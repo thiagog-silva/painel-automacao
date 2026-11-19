@@ -1,0 +1,1086 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="hub-nome" content="Resumo Férias/Rescisão">
+<meta name="hub-descricao" content="Lê o PDF da Relação de Cálculo da folha e monta a lista de Desconto Adto Férias e Líquido Rescisão pronta pra colar no Excel.">
+<meta name="hub-icone" content="🗒️">
+<meta name="hub-categoria" content="Folha de Pagamento">
+<title>Extrair Desconto Adto Férias / Rescisão — Folha</title>
+<!--
+  VERSÃO: 1.3.0 — finalizada e congelada em 2026-09-24.
+  Alterações desta versão:
+  - 1.1.0: correção na detecção de "Líquido Rescisão" no PDF (alguns
+    relatórios exportam esse evento com "ã" trocado por "ä" por falha de
+    fonte incorporada no PDF; a busca agora aceita as duas grafias).
+  - 1.2.0: correção na identificação da conta no CSV do razão analítico
+    (Etapa 3) — alguns exports reais chegam sem nenhuma acentuação (ex:
+    "RESCISOES A PAGAR") ou com o mesmo "ã"→"ä" do PDF ("Líquido Rescisäo");
+    a identificação da conta agora aceita essas variações.
+  - 1.3.0: Etapa 3 passa a ter dois campos de upload separados (um pra Adto
+    Férias, outro pra Rescisão) em vez de um campo único que tentava
+    adivinhar a conta pelo texto do CSV — mais universal, já que não depende
+    mais de reconhecer o nome exato da conta em cada arquivo. Corrigido
+    também um caso em que remover e re-selecionar o mesmo arquivo não
+    atualizava o campo. Além disso, quando o pagamento é casado com a
+    provisão do PDF, o resumo pra colar agora traz as duas pontas do
+    lançamento (a linha do pagamento, positiva, e logo abaixo a baixa da
+    provisão, negativa), no mesmo padrão já usado pros casos sem par.
+  Sem mudanças de layout, cores ou regras de cálculo já existentes.
+-->
+<style>
+:root{
+  --bg:#f5f7f5;
+  --surface:#ffffff;
+  --surface-alt:#eef2ef;
+  --ink:#182420;
+  --muted:#5c6f68;
+  --border:#dbe3de;
+  --accent:#0f5d52;
+  --accent-strong:#0b453d;
+  --accent-ink:#f4fbf9;
+  --accent-soft:#e0efec;
+  --danger:#b3261e;
+  --danger-soft:#fbe9e6;
+  --warning:#8a5a00;
+  --warning-soft:#fff1d9;
+  --success:#1e7d4a;
+  --success-soft:#e5f4ea;
+  --tag-debito-bg:#fff1d9;
+  --tag-debito-ink:#8a5a00;
+  --tag-credito-bg:#e3edfb;
+  --tag-credito-ink:#1b4f8a;
+  --shadow: 0 1px 2px rgba(15,30,25,.06), 0 8px 24px -12px rgba(15,30,25,.22);
+  --radius:14px;
+  --font-display:'IBM Plex Sans Condensed', 'IBM Plex Sans', sans-serif;
+  --font-body:'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono:'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9;
+    --muted:#94a6a0; --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6;
+    --accent-ink:#08201b; --accent-soft:#1a332d; --danger:#ff9d93; --danger-soft:#3a201d;
+    --warning:#ffcf70; --warning-soft:#3a2c12; --success:#8fe3ac; --success-soft:#173425;
+    --tag-debito-bg:#3a2c12; --tag-debito-ink:#ffcf70; --tag-credito-bg:#182b3d; --tag-credito-ink:#8fc2ff;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9;
+  --muted:#94a6a0; --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6;
+  --accent-ink:#08201b; --accent-soft:#1a332d; --danger:#ff9d93; --danger-soft:#3a201d;
+  --warning:#ffcf70; --warning-soft:#3a2c12; --success:#8fe3ac; --success-soft:#173425;
+  --tag-debito-bg:#3a2c12; --tag-debito-ink:#ffcf70; --tag-credito-bg:#182b3d; --tag-credito-ink:#8fc2ff;
+  --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+}
+
+*{ box-sizing:border-box; }
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--font-body);
+  margin:0; padding-inline:16px; padding-block:20px 60px; line-height:1.45;
+}
+h1,h2,h3{ font-family:var(--font-display); font-weight:700; text-wrap:balance; margin:0; }
+.mono{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+.app-shell{ max-width:1180px; margin:0 auto; }
+
+.topbar{
+  position:sticky; top:env(safe-area-inset-top,0px); z-index:30;
+  background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--border); margin:-20px -16px 28px; padding:16px;
+}
+.topbar-inner{ max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:14px 24px; justify-content:space-between; }
+.brand{ display:flex; align-items:center; gap:12px; }
+.brand-mark{
+  width:38px; height:38px; border-radius:10px; background:var(--accent); color:var(--accent-ink);
+  display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-weight:700; font-size:15px;
+  box-shadow:var(--shadow); flex:none;
+}
+.brand h1{ font-size:19px; letter-spacing:.2px; }
+.brand p{ margin:2px 0 0; font-size:12.5px; color:var(--muted); max-width:520px; }
+.steps-pills{ display:flex; gap:8px; flex-wrap:wrap; }
+.step-pill{
+  font-family:var(--font-mono); font-size:11.5px; letter-spacing:.03em; padding:6px 11px; border-radius:999px;
+  border:1px solid var(--border); color:var(--muted); background:var(--surface); white-space:nowrap;
+}
+.step-pill.is-active{ border-color:var(--accent); color:var(--accent-strong); background:var(--accent-soft); font-weight:600; }
+.step-pill.is-done{ color:var(--success); border-color:var(--success); }
+
+.step-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:26px; margin-bottom:22px; box-shadow:var(--shadow);
+}
+.step-head{ display:flex; align-items:flex-start; gap:14px; margin-bottom:18px; }
+.step-num{
+  width:32px; height:32px; border-radius:9px; background:var(--surface-alt); color:var(--ink);
+  font-family:var(--font-mono); font-weight:600; font-size:14px; display:flex; align-items:center; justify-content:center; flex:none;
+  border:1px solid var(--border);
+}
+.step-head h2{ font-size:20px; }
+.step-head .step-sub{ margin:3px 0 0; color:var(--muted); font-size:13.5px; max-width:64ch; }
+
+.dropzone{
+  border:1.5px dashed var(--border); border-radius:12px; padding:30px 20px; text-align:center;
+  background:var(--surface-alt); cursor:pointer; transition:border-color .15s, background .15s;
+}
+.dropzone:hover, .dropzone.drag{ border-color:var(--accent); background:var(--accent-soft); }
+.dropzone strong{ color:var(--ink); }
+input[type="file"]{ display:none; }
+.file-chip{
+  display:inline-flex; align-items:center; gap:8px; margin-top:14px; padding:7px 12px; border-radius:9px;
+  background:var(--accent-soft); color:var(--accent-strong); font-size:13px; font-family:var(--font-mono); word-break:break-all;
+}
+.progress-wrap{ margin-top:16px; display:none; }
+.progress-bar-bg{ background:var(--surface-alt); border-radius:6px; height:8px; overflow:hidden; }
+.progress-bar{ background:var(--accent); height:100%; width:0%; transition:width .15s; }
+.progress-label{ font-size:12.5px; color:var(--muted); margin-top:6px; }
+#errorBox{ display:none; margin-top:14px; padding:12px 14px; border-radius:9px; background:var(--danger-soft); color:var(--danger); font-size:13px; white-space:pre-wrap; }
+
+.field-row{ display:flex; flex-wrap:wrap; gap:16px; margin-top:16px; }
+.field{ display:flex; flex-direction:column; gap:5px; min-width:190px; flex:1; }
+.field label{ font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.02em; text-transform:uppercase; }
+select, input[type="text"], input[type="number"]{
+  font-family:var(--font-body); font-size:13.5px; padding:9px 10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--surface); color:var(--ink); width:100%;
+}
+select:focus, input:focus, button:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+input[type="text"].mono{ font-family:var(--font-mono); }
+
+.summary-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:8px 0 18px; }
+.summary-tile{ background:var(--surface-alt); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+.summary-tile .n{ font-family:var(--font-mono); font-size:22px; font-weight:600; }
+.summary-tile .l{ font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin-top:2px; }
+.summary-tile.accent{ background:var(--accent-soft); }
+.summary-tile.accent .n{ color:var(--accent-strong); }
+.summary-tile.warn .n{ color:var(--warning); }
+
+.group-head{ display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+.group-head h3{ font-size:16px; }
+
+.table-wrap{ overflow-x:auto; border:1px solid var(--border); border-radius:10px; margin-top:14px; max-height:420px; overflow-y:auto; }
+table{ border-collapse:collapse; width:100%; font-size:13px; }
+thead th{
+  position:sticky; top:0; background:var(--surface-alt); text-align:left; padding:9px 10px; font-size:11.5px;
+  text-transform:uppercase; letter-spacing:.04em; color:var(--muted); border-bottom:1px solid var(--border); white-space:nowrap;
+}
+tbody td{ padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+tbody tr:last-child td{ border-bottom:none; }
+td.mono, th.mono{ font-family:var(--font-mono); }
+
+.tag{ display:inline-flex; align-items:center; gap:5px; font-family:var(--font-mono); font-size:11.5px; font-weight:600; padding:4px 9px; border-radius:999px; white-space:nowrap; background:var(--accent-soft); color:var(--accent-strong); }
+.tag-debito{ background:var(--tag-debito-bg); color:var(--tag-debito-ink); }
+.tag-credito{ background:var(--tag-credito-bg); color:var(--tag-credito-ink); }
+.tag-ok{ background:var(--success-soft); color:var(--success); }
+.tag-warn{ background:var(--warning-soft); color:var(--warning); }
+
+button{ font-family:var(--font-body); cursor:pointer; border:none; border-radius:9px; font-weight:600; font-size:13.5px; }
+.btn-primary{ background:var(--accent); color:var(--accent-ink); padding:11px 20px; box-shadow:var(--shadow); border:none; }
+.btn-primary:disabled{ background:var(--muted); opacity:.45; cursor:not-allowed; box-shadow:none; }
+.btn-secondary{ background:var(--surface-alt); color:var(--ink); border:1px solid var(--border); padding:10px 16px; }
+.btn-ghost{ background:transparent; color:var(--muted); border:1px solid var(--border); padding:10px 16px; }
+.btn-link{ background:none; border:none; padding:0; font-size:12.5px; color:var(--accent); text-decoration:underline; font-weight:600; }
+.actions-row{ display:flex; flex-wrap:wrap; gap:12px; margin-top:18px; align-items:center; }
+.hint{ font-size:12.5px; color:var(--muted); }
+.hint.warn{ color:var(--warning); }
+.hint.err{ color:var(--danger); }
+
+.copy-preview{ width:100%; min-height:120px; font-family:var(--font-mono); font-size:12.5px; border:1px solid var(--border); border-radius:10px; padding:10px; margin-top:10px; white-space:pre; overflow:auto; background:var(--surface-alt); color:var(--ink); }
+.status-msg{ font-size:13px; padding:9px 13px; border-radius:9px; background:var(--accent-soft); color:var(--accent-strong); }
+.empty-cell{ color:var(--muted); }
+
+section#step2{ display:none; }
+
+.razao-block{ margin-top:26px; padding-top:22px; border-top:1px solid var(--border); }
+.razao-block:first-of-type{ margin-top:10px; padding-top:0; border-top:none; }
+.conta-badge{
+  display:inline-flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:11px; font-weight:600;
+  padding:3px 9px; border-radius:999px; background:var(--accent-soft); color:var(--accent-strong);
+}
+.file-list{ display:flex; flex-direction:column; gap:8px; margin-top:14px; }
+.file-list .file-chip{ margin-top:0; justify-content:space-between; }
+.file-chip .rm{ cursor:pointer; color:var(--muted); font-weight:700; margin-left:10px; }
+.empty-hint{
+  border:1px dashed var(--border); border-radius:10px; padding:16px; text-align:center; color:var(--muted);
+  font-size:13px; margin-top:14px;
+}
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-mark">FR</div>
+        <div>
+          <h1>Extrair Desconto Adto Férias / Rescisão</h1>
+          <p>Sobe o PDF da "Relação de Cálculo" mensal e monta a lista pronta pra colar no Excel: Data | Histórico | Valor (negativo). Também confere os CSVs do razão contra o PDF.</p>
+        </div>
+      </div>
+      <div class="steps-pills" id="stepsPills">
+        <span class="step-pill is-active" id="pill1">1 · Upload</span>
+        <span class="step-pill" id="pill2">2 · Conferir e copiar</span>
+        <span class="step-pill" id="pill3">3 · Conferir razão (CSV)</span>
+      </div>
+    </div>
+  </div>
+
+  <section id="step1" class="step-card">
+    <div class="step-head">
+      <div class="step-num">1</div>
+      <div>
+        <h2>Suba o PDF da folha (Relação de Cálculo)</h2>
+        <p class="step-sub">O mesmo relatório de todo mês, com uma página por colaborador. Quem tiver "Desconto Adto Férias" (cód. 281) ou "Líquido Rescisão" (cód. 264) entra na lista.</p>
+      </div>
+    </div>
+    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Selecionar PDF da folha">
+      <div>Arraste o PDF aqui ou <strong>clique para escolher</strong></div>
+    </div>
+    <input type="file" id="fileInput" accept=".pdf">
+    <div id="fileChipWrap"><span class="file-chip mono" id="filename" style="display:none"></span></div>
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-bar-bg"><div class="progress-bar" id="progressBar"></div></div>
+      <div class="progress-label" id="progressLabel"></div>
+    </div>
+    <div id="errorBox"></div>
+  </section>
+
+  <section id="step2" class="step-card">
+    <div class="step-head">
+      <div class="step-num">2</div>
+      <div>
+        <h2>Confira e copie pro Excel</h2>
+        <p class="step-sub" id="step2sub">Confira os nomes e valores antes de copiar. Desmarque o que não quiser incluir.</p>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="dataField">Data (último dia do período)</label>
+        <input type="text" id="dataField" class="mono">
+      </div>
+      <div class="field">
+        <label for="mesAnoField">Mês.Ano do histórico (ex: 01.2026)</label>
+        <input type="text" id="mesAnoField" class="mono">
+      </div>
+      <div class="field" style="flex:2 1 260px">
+        <label for="baseField">Texto base do histórico</label>
+        <input type="text" id="baseField" value="FOLHA DE PAGAMENTO">
+      </div>
+    </div>
+
+    <div class="summary-grid" id="stats"></div>
+
+    <div id="grupoFerias" style="margin-top:10px;">
+      <div class="group-head">
+        <h3>Desconto Adto Férias</h3>
+        <button class="btn-link toggle-all" data-grupo="ferias">desmarcar todos</button>
+      </div>
+      <div class="table-wrap">
+        <table class="resultTable" data-grupo="ferias">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Nome completo (PDF)</th>
+              <th>Histórico (truncado)</th>
+              <th>Valor</th>
+              <th>Pág.</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="actions-row">
+        <button class="btn-primary" data-grupo="ferias">Copiar Férias</button>
+        <span class="status-msg" data-grupo="ferias" style="display:none;"></span>
+      </div>
+      <textarea class="copy-preview" data-grupo="ferias" readonly></textarea>
+    </div>
+
+    <div id="grupoRescisao" style="margin-top:30px;">
+      <div class="group-head">
+        <h3>Líquido Rescisão</h3>
+        <button class="btn-link toggle-all" data-grupo="rescisao">desmarcar todos</button>
+      </div>
+      <div class="table-wrap">
+        <table class="resultTable" data-grupo="rescisao">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Nome completo (PDF)</th>
+              <th>Histórico (truncado)</th>
+              <th>Valor</th>
+              <th>Pág.</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="actions-row">
+        <button class="btn-primary" data-grupo="rescisao">Copiar Rescisão</button>
+        <span class="status-msg" data-grupo="rescisao" style="display:none;"></span>
+      </div>
+      <textarea class="copy-preview" data-grupo="rescisao" readonly></textarea>
+    </div>
+
+    <div class="actions-row" style="margin-top:30px;">
+      <button class="btn-ghost" id="resetBtn">Recomeçar</button>
+    </div>
+  </section>
+
+  <section id="step3" class="step-card">
+    <div class="step-head">
+      <div class="step-num">3</div>
+      <div>
+        <h2>Conferir razão (Pagamento x Provisão do PDF)</h2>
+        <p class="step-sub">Suba, em cada campo abaixo, o CSV do razão analítico daquela conta (exportado do sistema contábil). A ferramenta pega os lançamentos "PGTO" do arquivo e casa cada um pelo nome com o que foi extraído do PDF na Etapa 1. Quando não achar o par (provisão sem pagamento, ou pagamento sem provisão), pula uma linha pra destacar no resumo.</p>
+      </div>
+    </div>
+
+    <div class="razao-block" data-conta="ferias">
+      <div class="group-head">
+        <h3>Adto Férias <span class="conta-badge razao-conta-badge" data-conta="ferias">aguardando CSV</span></h3>
+      </div>
+
+      <div class="dropzone dropzone-razao" data-conta="ferias" tabindex="0" role="button" aria-label="Selecionar CSV do razão de Adto Férias">
+        <div>Arraste o CSV do razão de <strong>Adto Férias</strong> aqui ou <strong>clique para escolher</strong></div>
+      </div>
+      <input type="file" class="fileInputRazao" data-conta="ferias" accept=".csv" style="display:none">
+      <div class="file-list razao-file-list" data-conta="ferias"></div>
+      <div class="razao-err" data-conta="ferias" style="display:none; margin-top:14px; padding:12px 14px; border-radius:9px; background:var(--danger-soft); color:var(--danger); font-size:13px; white-space:pre-wrap;"></div>
+
+      <div class="summary-grid razao-stats" data-conta="ferias"></div>
+
+      <div class="table-wrap">
+        <table class="razaoTable" data-conta="ferias">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Nome</th>
+              <th>Valor provisão (PDF)</th>
+              <th>Data pagto (razão)</th>
+              <th>Histórico (razão)</th>
+              <th>Valor pago (razão)</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody><tr><td colspan="7" class="empty-cell">Suba o CSV do razão de Adto Férias acima.</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="actions-row">
+        <button class="btn-link toggle-all-razao" data-conta="ferias">desmarcar todos</button>
+        <button class="btn-primary copiar-razao" data-conta="ferias">Copiar resumo Férias</button>
+        <span class="status-msg status-msg-razao" data-conta="ferias" style="display:none;"></span>
+      </div>
+      <textarea class="copy-preview razao-preview" data-conta="ferias" readonly></textarea>
+    </div>
+
+    <div class="razao-block" data-conta="rescisao">
+      <div class="group-head">
+        <h3>Rescisão <span class="conta-badge razao-conta-badge" data-conta="rescisao">aguardando CSV</span></h3>
+      </div>
+
+      <div class="dropzone dropzone-razao" data-conta="rescisao" tabindex="0" role="button" aria-label="Selecionar CSV do razão de Rescisão">
+        <div>Arraste o CSV do razão de <strong>Rescisão</strong> aqui ou <strong>clique para escolher</strong></div>
+      </div>
+      <input type="file" class="fileInputRazao" data-conta="rescisao" accept=".csv" style="display:none">
+      <div class="file-list razao-file-list" data-conta="rescisao"></div>
+      <div class="razao-err" data-conta="rescisao" style="display:none; margin-top:14px; padding:12px 14px; border-radius:9px; background:var(--danger-soft); color:var(--danger); font-size:13px; white-space:pre-wrap;"></div>
+
+      <div class="summary-grid razao-stats" data-conta="rescisao"></div>
+
+      <div class="table-wrap">
+        <table class="razaoTable" data-conta="rescisao">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Nome</th>
+              <th>Valor provisão (PDF)</th>
+              <th>Data pagto (razão)</th>
+              <th>Histórico (razão)</th>
+              <th>Valor pago (razão)</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody><tr><td colspan="7" class="empty-cell">Suba o CSV do razão de Rescisão acima.</td></tr></tbody>
+        </table>
+      </div>
+
+      <div class="actions-row">
+        <button class="btn-link toggle-all-razao" data-conta="rescisao">desmarcar todos</button>
+        <button class="btn-primary copiar-razao" data-conta="rescisao">Copiar resumo Rescisão</button>
+        <span class="status-msg status-msg-razao" data-conta="rescisao" style="display:none;"></span>
+      </div>
+      <textarea class="copy-preview razao-preview" data-conta="rescisao" readonly></textarea>
+    </div>
+  </section>
+</div>
+
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<script type="module">
+import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.mjs';
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.worker.mjs';
+
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('fileInput');
+const filenameEl = document.getElementById('filename');
+const progressWrap = document.getElementById('progressWrap');
+const progressBar = document.getElementById('progressBar');
+const progressLabel = document.getElementById('progressLabel');
+const errorBox = document.getElementById('errorBox');
+const step1 = document.getElementById('step1');
+const step2 = document.getElementById('step2');
+const step2sub = document.getElementById('step2sub');
+const statsEl = document.getElementById('stats');
+const dataField = document.getElementById('dataField');
+const mesAnoField = document.getElementById('mesAnoField');
+const baseField = document.getElementById('baseField');
+const resetBtn = document.getElementById('resetBtn');
+const pill1 = document.getElementById('pill1');
+const pill2 = document.getElementById('pill2');
+
+const GRUPOS = {
+  ferias: { evento: 'Desconto Adto Férias', tbody: document.querySelector('table.resultTable[data-grupo="ferias"] tbody') },
+  rescisao: { evento: 'Líquido Rescisão', tbody: document.querySelector('table.resultTable[data-grupo="rescisao"] tbody') },
+};
+
+const EVENTOS = ['Desconto Adto Férias', 'Líquido Rescisão'];
+// Alguns relatórios (dependendo da fonte usada pelo sistema de folha) exportam o
+// PDF com o "ã" de "Rescisão" trocado por "ä" (falha de encoding da fonte incorporada
+// no PDF, não é erro de digitação). Por isso a busca desse evento aceita as duas
+// grafias — sem isso, todo lançamento de "Líquido Rescisão" nesses PDFs passa em
+// branco, silenciosamente.
+const EVENTOS_BUSCA = {
+  'Desconto Adto Férias': /Desconto Adto F[ée]rias/,
+  'Líquido Rescisão': /L[íi]quido Rescis[ãä]o/,
+};
+const CONECTORES = new Set(['DE','DA','DO','DOS','DAS','E']);
+
+let resultados = [];
+
+function showError(msg){
+  errorBox.style.display = 'block';
+  errorBox.textContent = 'Deu erro ao processar o arquivo:\n' + msg + '\n\nManda esse texto pra eu corrigir.';
+}
+function clearError(){
+  errorBox.style.display = 'none';
+  errorBox.textContent = '';
+}
+
+function truncarNome(nomeCompleto){
+  const words = nomeCompleto.trim().split(/\s+/).filter(Boolean);
+  const partes = [];
+  let i = 0, count = 0;
+  while (i < words.length && count < 2){
+    let palavra = words[i];
+    if (CONECTORES.has(palavra.toUpperCase()) && i+1 < words.length){
+      let parte = palavra;
+      i++;
+      while (i < words.length && CONECTORES.has(words[i].toUpperCase())){ parte += ' ' + words[i]; i++; }
+      if (i < words.length){ parte += ' ' + words[i]; i++; }
+      partes.push(parte);
+    } else {
+      partes.push(palavra);
+      i++;
+    }
+    count++;
+  }
+  return partes.join(' ');
+}
+
+async function getLinesForPage(page){
+  const content = await page.getTextContent();
+  const items = content.items.map(it => ({ str: it.str, x: it.transform[4], y: it.transform[5] }));
+  const tol = 2;
+  const lines = [];
+  items.forEach(it => {
+    let line = lines.find(l => Math.abs(l.y - it.y) < tol);
+    if (!line){ line = { y: it.y, items: [] }; lines.push(line); }
+    line.items.push(it);
+  });
+  lines.sort((a,b)=>b.y-a.y);
+  lines.forEach(l => l.items.sort((a,b)=>a.x-b.x));
+  return lines.map(l => l.items.map(it=>it.str).join(' '));
+}
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropzone.classList.remove('drag');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', () => {
+  if (fileInput.files.length) handleFile(fileInput.files[0]);
+});
+
+async function handleFile(file){
+  clearError();
+  filenameEl.textContent = file.name;
+  filenameEl.style.display = 'inline-flex';
+  progressWrap.style.display = 'block';
+  progressBar.style.width = '0%';
+  progressLabel.textContent = 'Lendo arquivo...';
+  try{
+    const buf = await file.arrayBuffer();
+    const doc = await pdfjsLib.getDocument({ data: buf }).promise;
+    const numPages = doc.numPages;
+
+    let periodoFim = null;
+    let currentNome = null;
+    const matches = [];
+
+    for (let p = 1; p <= numPages; p++){
+      const page = await doc.getPage(p);
+      const lines = await getLinesForPage(page);
+      const temColaborador = lines.some(l => /Colaborador:/.test(l));
+
+      for (const line of lines){
+        if (!periodoFim){
+          const m = line.match(/Período:\s*(\d{2}\/\d{2}\/\d{4})\s*a\s*(\d{2}\/\d{2}\/\d{4})/);
+          if (m) periodoFim = m[2];
+        }
+        if (!temColaborador) continue;
+        const mc = line.match(/Colaborador:.*?-\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ\s.\-]+?)\s+Admiss(?:ã|a)o:/);
+        if (mc) currentNome = mc[1].trim().replace(/\s+/g,' ');
+        for (const evento of EVENTOS){
+          const m2 = line.match(EVENTOS_BUSCA[evento]);
+          if (m2 && currentNome){
+            const rest = line.slice(m2.index + m2[0].length);
+            const vm = rest.match(/([\d.]+,\d{2})/);
+            if (vm){
+              matches.push({ page: p, nomeCompleto: currentNome, evento, valor: vm[1] });
+            }
+          }
+        }
+      }
+
+      if (p % 5 === 0 || p === numPages){
+        const pct = Math.round((p/numPages)*100);
+        progressBar.style.width = pct + '%';
+        progressLabel.textContent = `Lendo página ${p} de ${numPages}...`;
+        await new Promise(r => setTimeout(r, 0)); // deixa a UI atualizar
+      }
+    }
+
+    resultados = matches.map(m => ({ ...m, nomeTruncado: truncarNome(m.nomeCompleto) }));
+
+    // preencher campos de data/mês com o que foi encontrado
+    if (periodoFim){
+      dataField.value = periodoFim;
+      const partes = periodoFim.split('/');
+      if (partes.length === 3) mesAnoField.value = `${partes[1]}.${partes[2]}`;
+    } else {
+      dataField.value = '';
+      mesAnoField.value = '';
+      showError('Não consegui achar a linha "Período: dd/mm/aaaa a dd/mm/aaaa" no PDF. Preenche a Data e o Mês.Ano manualmente antes de copiar.');
+    }
+
+    renderResults();
+    step1.style.display = 'none';
+    step2.style.display = 'block';
+    pill1.classList.remove('is-active');
+    pill1.classList.add('is-done');
+    pill2.classList.add('is-active');
+  } catch(e){
+    showError((e && e.stack) ? e.stack : String(e));
+  }
+}
+
+function renderResults(){
+  Object.values(GRUPOS).forEach(g => g.tbody.innerHTML = '');
+  const porEvento = {};
+  resultados.forEach(r => porEvento[r.evento] = (porEvento[r.evento]||0)+1);
+  statsEl.innerHTML = `
+    <div class="summary-tile accent"><div class="n">${resultados.length}</div><div class="l">lançamentos encontrados</div></div>
+    <div class="summary-tile"><div class="n">${porEvento['Desconto Adto Férias']||0}</div><div class="l">Desconto Adto Férias</div></div>
+    <div class="summary-tile"><div class="n">${porEvento['Líquido Rescisão']||0}</div><div class="l">Líquido Rescisão</div></div>
+  `;
+  step2sub.textContent = 'Confira os nomes e valores antes de copiar. Desmarque o que não quiser incluir.';
+
+  Object.entries(GRUPOS).forEach(([key, g]) => {
+    const itens = resultados
+      .map((r, idx) => ({ r, idx }))
+      .filter(x => x.r.evento === g.evento);
+    if (!itens.length){
+      g.tbody.innerHTML = '<tr><td colspan="5" class="empty-cell">Nenhum caso encontrado.</td></tr>';
+      return;
+    }
+    itens.forEach(({ r, idx }) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="checkbox" data-idx="${idx}" checked></td>
+        <td>${r.nomeCompleto}</td>
+        <td class="mono">${r.nomeTruncado}</td>
+        <td class="mono">${r.valor}</td>
+        <td class="mono">${r.page}</td>
+      `;
+      g.tbody.appendChild(tr);
+    });
+  });
+
+  updateAllPreviews();
+}
+
+function buildLinesForGrupo(key){
+  const data = dataField.value.trim();
+  const mesAno = mesAnoField.value.trim();
+  const base = baseField.value.trim();
+  const tbody = GRUPOS[key].tbody;
+  const checked = Array.from(tbody.querySelectorAll('input[type=checkbox]')).filter(b=>b.checked);
+  return checked.map(box => {
+    const r = resultados[Number(box.getAttribute('data-idx'))];
+    const historico = `${base} ${mesAno} - ${r.nomeTruncado}`;
+    const valorNeg = '-' + r.valor;
+    return `${data}\t${historico}\t${valorNeg}`;
+  });
+}
+
+function updateAllPreviews(){
+  Object.keys(GRUPOS).forEach(key => {
+    const preview = document.querySelector(`.copy-preview[data-grupo="${key}"]`);
+    preview.value = buildLinesForGrupo(key).join('\n');
+  });
+}
+
+[dataField, mesAnoField, baseField].forEach(el => el.addEventListener('input', updateAllPreviews));
+Object.values(GRUPOS).forEach(g => g.tbody.addEventListener('change', updateAllPreviews));
+
+document.querySelectorAll('.toggle-all[data-grupo]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const key = btn.getAttribute('data-grupo');
+    const boxes = GRUPOS[key].tbody.querySelectorAll('input[type=checkbox]');
+    const anyChecked = Array.from(boxes).some(b => b.checked);
+    boxes.forEach(b => b.checked = !anyChecked);
+    btn.textContent = anyChecked ? 'marcar todos' : 'desmarcar todos';
+    updateAllPreviews();
+  });
+});
+
+document.querySelectorAll('button.btn-primary[data-grupo]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const key = btn.getAttribute('data-grupo');
+    const lines = buildLinesForGrupo(key);
+    const text = lines.join('\n');
+    const statusEl = document.querySelector(`.status-msg[data-grupo="${key}"]`);
+    try{
+      await navigator.clipboard.writeText(text);
+      statusEl.style.display = 'inline';
+      statusEl.textContent = `${lines.length} linha(s) copiada(s). Já pode colar na aba de ${key === 'ferias' ? 'Férias' : 'Rescisão'}.`;
+    } catch(e){
+      const preview = document.querySelector(`.copy-preview[data-grupo="${key}"]`);
+      preview.select();
+      document.execCommand('copy');
+      statusEl.style.display = 'inline';
+      statusEl.textContent = `${lines.length} linha(s) selecionada(s) no campo abaixo — Ctrl+C pra copiar.`;
+    }
+  });
+});
+
+function resetAll(){
+  step2.style.display = 'none';
+  step1.style.display = 'block';
+  fileInput.value = '';
+  filenameEl.textContent = '';
+  filenameEl.style.display = 'none';
+  progressWrap.style.display = 'none';
+  resultados = [];
+  clearError();
+  document.querySelectorAll('.status-msg[data-grupo]').forEach(el => el.style.display = 'none');
+  pill1.classList.add('is-active');
+  pill1.classList.remove('is-done');
+  pill2.classList.remove('is-active');
+}
+resetBtn.addEventListener('click', resetAll);
+
+/* ============================================================
+   ETAPA 3 — Conferir razão (CSV do sistema x PDF da Etapa 1)
+   ============================================================ */
+
+const CONTAS_RAZAO = ['ferias', 'rescisao'];
+const EVENTO_POR_CONTA = { ferias: 'Desconto Adto Férias', rescisao: 'Líquido Rescisão' };
+const RAZAO_STATE = { ferias: null, rescisao: null }; // { arquivo, linhasPagto: [...], totalMes: {...} }
+
+function showErrorRazaoConta(conta, msg){
+  const box = document.querySelector(`.razao-err[data-conta="${conta}"]`);
+  box.style.display = 'block';
+  box.textContent = msg;
+}
+function clearErrorRazaoConta(conta){
+  const box = document.querySelector(`.razao-err[data-conta="${conta}"]`);
+  box.style.display = 'none';
+  box.textContent = '';
+}
+
+function normalizarNome(nome){
+  return (nome || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+    .split(/\s+/)
+    .filter(w => w && !CONECTORES.has(w));
+}
+
+function nomesCombinam(nomeA, nomeB){
+  const a = normalizarNome(nomeA);
+  const b = normalizarNome(nomeB);
+  if (!a.length || !b.length) return false;
+  if (a[0] === b[0]) return true; // primeiro nome bate
+  const setB = new Set(b);
+  return a.some(w => w.length > 2 && setB.has(w)); // sobrenome em comum
+}
+
+function parseNumeroBR(s){
+  if (s === null || s === undefined) return 0;
+  s = String(s).trim().replace(/^"|"$/g, '');
+  if (!s) return 0;
+  const n = parseFloat(s.replace(/\./g, '').replace(',', '.'));
+  return isNaN(n) ? 0 : n;
+}
+
+function formatarValorBR(num){
+  return (num || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function extrairNomePgto(historico){
+  const partes = (historico || '').split('/');
+  let nome = partes.length >= 2 ? partes[1].trim() : '';
+  // remove qualquer parêntese (fechado ou não — tem histórico com "(" sem ")" por erro de digitação)
+  nome = nome.replace(/\s*\(.*$/, '').trim();
+  return nome;
+}
+
+// decodifica o arquivo tentando UTF-8 primeiro; se vier cheio de caractere de
+// substituição (comum em CSV exportado em ISO-8859-1/Windows-1252), refaz em Latin-1
+function decodificarBuffer(buf){
+  const utf8 = new TextDecoder('utf-8').decode(buf);
+  const ruins = (utf8.match(/\uFFFD/g) || []).length;
+  if (ruins > 3){
+    return new TextDecoder('windows-1252').decode(buf);
+  }
+  return utf8;
+}
+
+function dividirLinhaCsv(linha, delim){
+  const out = [];
+  let cur = '';
+  let dentroAspas = false;
+  for (let i = 0; i < linha.length; i++){
+    const c = linha[i];
+    if (dentroAspas){
+      if (c === '"'){
+        if (linha[i + 1] === '"'){ cur += '"'; i++; }
+        else { dentroAspas = false; }
+      } else {
+        cur += c;
+      }
+    } else {
+      if (c === '"') dentroAspas = true;
+      else if (c === delim){ out.push(cur); cur = ''; }
+      else cur += c;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+function parseRazaoCsv(texto){
+  const linhas = texto.split(/\r?\n/);
+  const headerIdx = linhas.findIndex(l => /^;PLANO CONTABIL/i.test(l.trim()));
+  const linhasPagto = [];
+  let totalMes = null;
+  if (headerIdx === -1) return { linhasPagto, totalMes };
+
+  for (let i = headerIdx + 1; i < linhas.length; i++){
+    const linha = linhas[i];
+    if (!linha || !linha.trim()) continue;
+    if (/^RAZ[ÃA]O ANAL[IÍ]TICO/i.test(linha.trim())) break; // começou o totalizador
+    const campos = dividirLinhaCsv(linha, ';').map(c => c.trim().replace(/^"|"$/g, ''));
+    if (campos.length < 15) continue;
+
+    const dtaLan = campos[6];
+    const historico = campos[11];
+    const debito = parseNumeroBR(campos[12]);
+    const credito = parseNumeroBR(campos[13]);
+    if (!historico) continue;
+
+    if (/^PGTO\b/i.test(historico)){
+      const valor = debito > 0 ? debito : credito;
+      linhasPagto.push({ data: dtaLan, historico, nome: extrairNomePgto(historico), valor });
+    } else if (/^VR REFERENTE A/i.test(historico)){
+      totalMes = { debito, credito, historico };
+    }
+  }
+  return { linhasPagto, totalMes };
+}
+
+function renderFileListConta(conta){
+  const list = document.querySelector(`.razao-file-list[data-conta="${conta}"]`);
+  const st = RAZAO_STATE[conta];
+  list.innerHTML = '';
+  if (!st) return;
+  const chip = document.createElement('span');
+  chip.className = 'file-chip mono';
+  chip.innerHTML = `${st.arquivo} <span class="rm" data-conta="${conta}" title="remover">✕</span>`;
+  list.appendChild(chip);
+  chip.querySelector('.rm').addEventListener('click', () => {
+    RAZAO_STATE[conta] = null;
+    // limpa o input também, senão escolher de novo o mesmo arquivo (mesmo
+    // caminho) não dispara o evento "change" e a ferramenta parece travada.
+    const input = document.querySelector(`input.fileInputRazao[data-conta="${conta}"]`);
+    if (input) input.value = '';
+    renderFileListConta(conta);
+    processarConta(conta);
+  });
+}
+
+// Cada campo já sabe qual conta é (não depende mais de reconhecer o nome da
+// conta dentro do CSV — o texto dessa descrição varia demais de sistema pra
+// sistema e até dentro do mesmo sistema, com ou sem acento, então deixamos
+// o usuário indicar direto em qual campo cada arquivo entra).
+async function handleRazaoFile(conta, file){
+  clearErrorRazaoConta(conta);
+  try{
+    const buf = await file.arrayBuffer();
+    const texto = decodificarBuffer(buf);
+    const { linhasPagto, totalMes } = parseRazaoCsv(texto);
+    if (!linhasPagto.length && !totalMes){
+      showErrorRazaoConta(conta, `Não encontrei nenhum lançamento "PGTO" nem a linha "VR REFERENTE A..." em "${file.name}". Confere se é o razão analítico certo (Destino: CSV, com a coluna de cabeçalho ";PLANO CONTABIL;...").`);
+    }
+    RAZAO_STATE[conta] = { arquivo: file.name, linhasPagto, totalMes };
+    renderFileListConta(conta);
+    processarConta(conta);
+  } catch(e){
+    showErrorRazaoConta(conta, `Deu erro lendo "${file.name}":\n${(e && e.stack) ? e.stack : String(e)}`);
+  }
+}
+
+document.querySelectorAll('.dropzone-razao[data-conta]').forEach(dz => {
+  const conta = dz.getAttribute('data-conta');
+  const input = document.querySelector(`input.fileInputRazao[data-conta="${conta}"]`);
+  dz.addEventListener('click', () => input.click());
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('drag');
+    if (e.dataTransfer.files.length) handleRazaoFile(conta, e.dataTransfer.files[0]);
+  });
+  input.addEventListener('change', () => {
+    if (input.files.length) handleRazaoFile(conta, input.files[0]);
+  });
+});
+
+// resultado do casamento por conta
+const RAZAO_COMPARATIVO = { ferias: [], rescisao: [] };
+
+function processarConta(conta){
+  const evento = EVENTO_POR_CONTA[conta];
+  const provisoes = resultados
+    .filter(r => r.evento === evento)
+    .map((r, i) => ({ tipo: 'provisao', id: `p${i}`, nome: r.nomeCompleto, nomeTruncado: r.nomeTruncado, valorProvisao: parseNumeroBR(r.valor), par: null }));
+
+  const st = RAZAO_STATE[conta];
+  const pagamentos = (st ? st.linhasPagto : []).map((p, i) => ({ tipo: 'pagamento', id: `g${i}`, nome: p.nome, data: p.data, historico: p.historico, valorPago: p.valor, usado: false }));
+
+  provisoes.forEach(prov => {
+    const candidatos = pagamentos.filter(p => !p.usado);
+    let par = candidatos.find(p => nomesCombinam(prov.nome, p.nome));
+    if (!par){
+      par = candidatos.find(p => Math.abs(p.valorPago - prov.valorProvisao) < 0.005);
+    }
+    if (par){
+      par.usado = true;
+      prov.par = par;
+    }
+  });
+
+  const linhas = [];
+  provisoes.forEach(prov => {
+    linhas.push({
+      nome: prov.nome,
+      nomeTruncado: prov.nomeTruncado,
+      valorProvisao: prov.valorProvisao,
+      data: prov.par ? prov.par.data : '',
+      historico: prov.par ? prov.par.historico : '',
+      valorPago: prov.par ? prov.par.valorPago : null,
+      pareado: !!prov.par,
+      origem: 'provisao',
+    });
+  });
+  pagamentos.filter(p => !p.usado).forEach(p => {
+    linhas.push({
+      nome: p.nome,
+      nomeTruncado: p.nome,
+      valorProvisao: null,
+      data: p.data,
+      historico: p.historico,
+      valorPago: p.valorPago,
+      pareado: false,
+      origem: 'pagamento',
+    });
+  });
+  linhas.forEach((l, idx) => l.idx = idx);
+
+  RAZAO_COMPARATIVO[conta] = linhas;
+  renderRazaoStats(conta, linhas, provisoes, pagamentos, st);
+  renderRazaoTable(conta, linhas);
+  updateRazaoPreview(conta);
+  const badge = document.querySelector(`.razao-conta-badge[data-conta="${conta}"]`);
+  badge.textContent = st ? st.arquivo : 'aguardando CSV';
+  const statusEl = document.querySelector(`.status-msg-razao[data-conta="${conta}"]`);
+  statusEl.style.display = 'none';
+}
+
+function renderRazaoStats(conta, linhas, provisoes, pagamentos, st){
+  const pares = provisoes.filter(p => p.par).length;
+  const semPagto = provisoes.filter(p => !p.par).length;
+  const semProvisao = pagamentos.filter(p => !p.usado).length;
+  const el = document.querySelector(`.razao-stats[data-conta="${conta}"]`);
+
+  let tileConferencia = '';
+  if (st && st.totalMes){
+    const totalMesValor = st.totalMes.credito > 0 ? st.totalMes.credito : st.totalMes.debito;
+    const somaProvisoes = provisoes.reduce((acc, p) => acc + p.valorProvisao, 0);
+    const bate = Math.abs(totalMesValor - somaProvisoes) < 0.02;
+    tileConferencia = `
+      <div class="summary-tile ${bate ? '' : 'warn'}">
+        <div class="n">${bate ? 'OK' : '⚠'}</div>
+        <div class="l">total do mês no razão (${formatarValorBR(totalMesValor)}) x soma do PDF (${formatarValorBR(somaProvisoes)})</div>
+      </div>`;
+  }
+
+  el.innerHTML = `
+    <div class="summary-tile accent"><div class="n">${provisoes.length}</div><div class="l">provisões no PDF</div></div>
+    <div class="summary-tile accent"><div class="n">${pagamentos.length}</div><div class="l">pagamentos no razão</div></div>
+    <div class="summary-tile"><div class="n">${pares}</div><div class="l">pares casados</div></div>
+    <div class="summary-tile ${semPagto ? 'warn' : ''}"><div class="n">${semPagto}</div><div class="l">sem pagamento no razão</div></div>
+    <div class="summary-tile ${semProvisao ? 'warn' : ''}"><div class="n">${semProvisao}</div><div class="l">pagamento sem provisão no PDF</div></div>
+    ${tileConferencia}
+  `;
+}
+
+function renderRazaoTable(conta, linhas){
+  const tbody = document.querySelector(`table.razaoTable[data-conta="${conta}"] tbody`);
+  tbody.innerHTML = '';
+  if (!linhas.length){
+    tbody.innerHTML = `<tr><td colspan="7" class="empty-cell">Suba o CSV do razão e o PDF na Etapa 1 pra ver a comparação.</td></tr>`;
+    return;
+  }
+  linhas.forEach(l => {
+    const tagStatus = l.pareado
+      ? '<span class="tag tag-ok">pareado</span>'
+      : (l.origem === 'provisao'
+        ? '<span class="tag tag-warn">sem pagamento no razão</span>'
+        : '<span class="tag tag-warn">pagamento sem provisão no PDF</span>');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><input type="checkbox" data-idx="${l.idx}" checked></td>
+      <td>${l.nome || '<span class="empty-cell">—</span>'}</td>
+      <td class="mono">${l.valorProvisao !== null ? formatarValorBR(l.valorProvisao) : '<span class="empty-cell">—</span>'}</td>
+      <td class="mono">${l.data || '<span class="empty-cell">—</span>'}</td>
+      <td class="mono">${l.historico || '<span class="empty-cell">—</span>'}</td>
+      <td class="mono">${l.valorPago !== null ? formatarValorBR(l.valorPago) : '<span class="empty-cell">—</span>'}</td>
+      <td>${tagStatus}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function buildLinesForConta(conta){
+  const dataRef = dataField.value.trim();
+  const mesAno = mesAnoField.value.trim();
+  const base = baseField.value.trim();
+  const tbody = document.querySelector(`table.razaoTable[data-conta="${conta}"] tbody`);
+  const checkedIdx = new Set(
+    Array.from(tbody.querySelectorAll('input[type=checkbox]:checked')).map(b => Number(b.getAttribute('data-idx')))
+  );
+  const linhasSel = (RAZAO_COMPARATIVO[conta] || []).filter(l => checkedIdx.has(l.idx));
+
+  const linhas = [];
+  linhasSel.forEach(l => {
+    if (!l.pareado && linhas.length && linhas[linhas.length - 1] !== ''){
+      linhas.push('');
+    }
+    if (l.pareado){
+      // par completo: uma linha positiva com o pagamento (vindo do razão) e
+      // logo abaixo a baixa da provisão, negativa, no mesmo valor do PDF —
+      // as duas pontas do lançamento, prontas pra colar juntas no Excel.
+      linhas.push(`${l.data}\t${l.historico}\t${formatarValorBR(l.valorPago)}`);
+      linhas.push(`${dataRef}\t${base} ${mesAno} - ${l.nomeTruncado}\t-${formatarValorBR(l.valorProvisao)}`);
+    } else if (l.origem === 'provisao'){
+      linhas.push(`${dataRef}\t${base} ${mesAno} - ${l.nomeTruncado} (SEM PAGAMENTO NO RAZÃO)\t-${formatarValorBR(l.valorProvisao)}`);
+    } else {
+      linhas.push(`${l.data}\t${l.historico} (SEM PROVISÃO NO PDF)\t${formatarValorBR(l.valorPago)}`);
+    }
+    if (!l.pareado){
+      linhas.push('');
+    }
+  });
+
+  const limpo = [];
+  linhas.forEach(l => {
+    if (l === '' && limpo.length && limpo[limpo.length - 1] === '') return;
+    limpo.push(l);
+  });
+  while (limpo.length && limpo[limpo.length - 1] === '') limpo.pop();
+  return limpo;
+}
+
+function updateRazaoPreview(conta){
+  const preview = document.querySelector(`.razao-preview[data-conta="${conta}"]`);
+  preview.value = buildLinesForConta(conta).join('\n');
+}
+
+CONTAS_RAZAO.forEach(conta => {
+  document.querySelector(`table.razaoTable[data-conta="${conta}"] tbody`).addEventListener('change', () => {
+    updateRazaoPreview(conta);
+  });
+});
+
+document.querySelectorAll('.toggle-all-razao[data-conta]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const conta = btn.getAttribute('data-conta');
+    const boxes = document.querySelectorAll(`table.razaoTable[data-conta="${conta}"] tbody input[type=checkbox]`);
+    const anyChecked = Array.from(boxes).some(b => b.checked);
+    boxes.forEach(b => b.checked = !anyChecked);
+    btn.textContent = anyChecked ? 'marcar todos' : 'desmarcar todos';
+    updateRazaoPreview(conta);
+  });
+});
+
+document.querySelectorAll('button.copiar-razao[data-conta]').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const conta = btn.getAttribute('data-conta');
+    const lines = buildLinesForConta(conta);
+    const text = lines.join('\n');
+    const statusEl = document.querySelector(`.status-msg-razao[data-conta="${conta}"]`);
+    const nomeConta = conta === 'ferias' ? 'Férias' : 'Rescisão';
+    try{
+      await navigator.clipboard.writeText(text);
+      statusEl.style.display = 'inline';
+      statusEl.textContent = `Resumo de ${nomeConta} copiado. Já pode colar.`;
+    } catch(e){
+      const preview = document.querySelector(`.razao-preview[data-conta="${conta}"]`);
+      preview.select();
+      document.execCommand('copy');
+      statusEl.style.display = 'inline';
+      statusEl.textContent = `Resumo de ${nomeConta} selecionado no campo abaixo — Ctrl+C pra copiar.`;
+    }
+  });
+});
+
+// se o PDF da Etapa 1 for (re)processado depois de já ter subido CSVs, reprocessa a comparação
+const _renderResultsOriginal = renderResults;
+renderResults = function(){
+  _renderResultsOriginal();
+  CONTAS_RAZAO.forEach(conta => { if (RAZAO_STATE[conta]) processarConta(conta); });
+};
+</script>
+
+</body>
+</html>

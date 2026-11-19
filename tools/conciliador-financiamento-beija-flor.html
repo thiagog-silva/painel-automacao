@@ -1,0 +1,1289 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="hub-nome" content="Conciliação Empréstimos e Financiamentos">
+<meta name="hub-descricao" content="Com base na planilha de empréstimos unificados, concilia todos os pagamentos conforme balancete e gera os lançamentos de apropriação de juros e LP/CP.">
+<meta name="hub-icone" content="⚖️">
+<meta name="hub-categoria" content="Conciliação">
+<title>Conciliador de Financiamento</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#f5f7f5;
+  --surface:#ffffff;
+  --surface-alt:#eef2ef;
+  --ink:#182420;
+  --muted:#5c6f68;
+  --border:#dbe3de;
+  --accent:#0f5d52;
+  --accent-strong:#0b453d;
+  --accent-ink:#f4fbf9;
+  --accent-soft:#e0efec;
+  --danger:#b3261e;
+  --danger-soft:#fbe9e6;
+  --warning:#8a5a00;
+  --warning-soft:#fff1d9;
+  --success:#1e7d4a;
+  --success-soft:#e5f4ea;
+  --tag-debito-bg:#fff1d9;
+  --tag-debito-ink:#8a5a00;
+  --tag-credito-bg:#e3edfb;
+  --tag-credito-ink:#1b4f8a;
+  --shadow: 0 1px 2px rgba(15,30,25,.06), 0 8px 24px -12px rgba(15,30,25,.22);
+  --radius:14px;
+  --font-display:'IBM Plex Sans Condensed', 'IBM Plex Sans', sans-serif;
+  --font-body:'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono:'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9;
+    --muted:#94a6a0; --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6;
+    --accent-ink:#08201b; --accent-soft:#1a332d; --danger:#ff9d93; --danger-soft:#3a201d;
+    --warning:#ffcf70; --warning-soft:#3a2c12; --success:#8fe3ac; --success-soft:#173425;
+    --tag-debito-bg:#3a2c12; --tag-debito-ink:#ffcf70; --tag-credito-bg:#182b3d; --tag-credito-ink:#8fc2ff;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9;
+  --muted:#94a6a0; --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6;
+  --accent-ink:#08201b; --accent-soft:#1a332d; --danger:#ff9d93; --danger-soft:#3a201d;
+  --warning:#ffcf70; --warning-soft:#3a2c12; --success:#8fe3ac; --success-soft:#173425;
+  --tag-debito-bg:#3a2c12; --tag-debito-ink:#ffcf70; --tag-credito-bg:#182b3d; --tag-credito-ink:#8fc2ff;
+  --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+}
+
+*{ box-sizing:border-box; }
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--font-body);
+  margin:0; padding-inline:16px; padding-block:20px 60px;
+}
+h1,h2,h3{ font-family:var(--font-display); font-weight:700; text-wrap:balance; margin:0; }
+.mono{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+.app-shell{ max-width:1240px; margin:0 auto; }
+
+.topbar{
+  position:sticky; top:env(safe-area-inset-top,0px); z-index:30;
+  background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--border); margin:-20px -16px 28px; padding:16px;
+}
+.topbar-inner{ max-width:1240px; margin:0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:14px 24px; justify-content:space-between; }
+.brand{ display:flex; align-items:center; gap:12px; }
+.brand-mark{
+  width:38px; height:38px; border-radius:10px; background:var(--accent); color:var(--accent-ink);
+  display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-weight:700; font-size:15px;
+  box-shadow:var(--shadow); flex:none;
+}
+.brand h1{ font-size:19px; letter-spacing:.2px; }
+.brand p{ margin:2px 0 0; font-size:12.5px; color:var(--muted); }
+.steps-pills{ display:flex; gap:8px; flex-wrap:wrap; }
+.step-pill{
+  font-family:var(--font-mono); font-size:11.5px; letter-spacing:.03em; padding:6px 11px; border-radius:999px;
+  border:1px solid var(--border); color:var(--muted); background:var(--surface); white-space:nowrap;
+}
+.step-pill.is-active{ border-color:var(--accent); color:var(--accent-strong); background:var(--accent-soft); font-weight:600; }
+.step-pill.is-done{ color:var(--success); border-color:var(--success); }
+
+.step-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:26px; margin-bottom:22px; box-shadow:var(--shadow);
+}
+.step-card[data-locked="true"]{ opacity:.45; pointer-events:none; }
+.step-head{ display:flex; align-items:flex-start; gap:14px; margin-bottom:18px; justify-content:space-between; flex-wrap:wrap; }
+.step-head-main{ display:flex; align-items:flex-start; gap:14px; }
+.step-num{
+  width:32px; height:32px; border-radius:9px; background:var(--surface-alt); color:var(--ink);
+  font-family:var(--font-mono); font-weight:600; font-size:14px; display:flex; align-items:center; justify-content:center; flex:none;
+  border:1px solid var(--border);
+}
+.step-head h2{ font-size:20px; }
+.step-head .step-sub{ margin:3px 0 0; color:var(--muted); font-size:13.5px; max-width:70ch; }
+
+.dropzone{
+  border:1.5px dashed var(--border); border-radius:12px; padding:30px 20px; text-align:center;
+  background:var(--surface-alt); cursor:pointer; transition:border-color .15s, background .15s;
+}
+.dropzone:hover, .dropzone.is-dragover{ border-color:var(--accent); background:var(--accent-soft); }
+.dropzone strong{ display:block; font-size:15px; margin-bottom:4px; }
+.dropzone span{ font-size:12.5px; color:var(--muted); }
+.dropzone input{ display:none; }
+.file-chip{
+  display:inline-flex; align-items:center; gap:8px; margin:6px 6px 0 0; padding:7px 12px; border-radius:9px;
+  background:var(--accent-soft); color:var(--accent-strong); font-size:13px; font-family:var(--font-mono);
+}
+.field-row{ display:flex; flex-wrap:wrap; gap:16px; margin-top:16px; }
+.field{ display:flex; flex-direction:column; gap:5px; min-width:190px; flex:1; }
+.field label{ font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.02em; text-transform:uppercase; }
+select, input[type="text"], input[type="number"], input[type="month"]{
+  font-family:var(--font-body); font-size:13.5px; padding:9px 10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--surface); color:var(--ink); width:100%;
+}
+select:focus, input:focus, button:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+
+.table-wrap{ overflow-x:auto; border:1px solid var(--border); border-radius:10px; margin-top:14px; }
+table{ border-collapse:collapse; width:100%; font-size:13px; }
+thead th{
+  position:sticky; top:0; background:var(--surface-alt); text-align:left; padding:9px 10px; font-size:11.5px;
+  text-transform:uppercase; letter-spacing:.04em; color:var(--muted); border-bottom:1px solid var(--border); white-space:nowrap;
+}
+tbody td{ padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+tbody tr:last-child td{ border-bottom:none; }
+tbody tr:hover{ background:var(--surface-alt); }
+td.num{ text-align:right; white-space:nowrap; }
+table input[type="text"], table input[type="number"], table select{ padding:6px 8px; font-size:12.5px; min-width:130px; }
+
+button{ font-family:var(--font-body); cursor:pointer; border:none; border-radius:9px; font-weight:600; font-size:13.5px; }
+.btn-primary{ background:var(--accent); color:var(--accent-ink); padding:11px 20px; box-shadow:var(--shadow); }
+.btn-primary:disabled{ opacity:.45; cursor:not-allowed; box-shadow:none; }
+.btn-secondary{ background:var(--surface-alt); color:var(--ink); border:1px solid var(--border); padding:10px 16px; }
+.btn-ghost{ background:transparent; color:var(--muted); border:1px solid var(--border); padding:7px 10px; font-size:12px; }
+.actions-row{ display:flex; flex-wrap:wrap; gap:12px; margin-top:18px; align-items:center; justify-content:space-between; }
+.hint{ font-size:12.5px; color:var(--muted); }
+.hint.warn{ color:var(--warning); }
+.hint.err{ color:var(--danger); }
+.hint.ok{ color:var(--success); font-weight:600; }
+
+.tag{ display:inline-flex; align-items:center; gap:5px; font-family:var(--font-mono); font-size:11.5px; font-weight:600; padding:4px 9px; border-radius:999px; white-space:nowrap; }
+.tag-debito{ background:var(--tag-debito-bg); color:var(--tag-debito-ink); }
+.tag-credito{ background:var(--tag-credito-bg); color:var(--tag-credito-ink); }
+.tag-info{ background:var(--surface-alt); color:var(--muted); border:1px solid var(--border); }
+.tag-ok{ background:var(--success-soft); color:var(--success); }
+.tag-err{ background:var(--danger-soft); color:var(--danger); }
+
+.empty-state{ text-align:center; padding:34px 16px; color:var(--success); }
+.empty-state .big{ font-size:28px; }
+
+fieldset{ border:1px solid var(--border); border-radius:10px; padding:16px; margin:18px 0 0; }
+legend{ padding:0 6px; font-size:12.5px; font-weight:700; color:var(--accent-strong); text-transform:uppercase; letter-spacing:.03em; }
+
+.toast-host{ position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom,0px)); z-index:60; display:flex; flex-direction:column; gap:8px; max-width:min(360px, calc(100vw - 32px)); }
+.toast{ background:var(--ink); color:var(--bg); padding:11px 14px; border-radius:9px; font-size:13px; box-shadow:var(--shadow); animation:toast-in .18s ease-out; }
+.toast.toast-err{ background:var(--danger); color:#fff; }
+.toast.toast-ok{ background:var(--success); color:#08201b; }
+@keyframes toast-in{ from{ transform:translateY(6px); opacity:0; } to{ transform:none; opacity:1; } }
+
+.check-list{ display:flex; flex-direction:column; gap:10px; }
+.check-item{ border-radius:10px; padding:12px 14px; font-size:13px; display:flex; gap:10px; align-items:flex-start; }
+.check-item.ok{ background:var(--success-soft); color:var(--success); }
+.check-item.warn{ background:var(--warning-soft); color:var(--warning); }
+.check-item.err{ background:var(--danger-soft); color:var(--danger); }
+.check-item.info{ background:var(--surface-alt); color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="app-shell">
+
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-mark">CF</div>
+        <div>
+          <h1>Conciliador de Financiamento</h1>
+          <p>Reclassifica LP → CP e apropria juros dos empréstimos/financiamentos com base nas planilhas de controle e no balancete</p>
+        </div>
+      </div>
+      <div class="steps-pills">
+        <span class="step-pill" id="pill-1">1 · Planilhas</span>
+        <span class="step-pill" id="pill-2">2 · Balancete</span>
+        <span class="step-pill" id="pill-3">3 · Contas</span>
+        <span class="step-pill" id="pill-4">4 · Validação</span>
+        <span class="step-pill" id="pill-5">5 · Lançamentos</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-card">
+    <div class="step-head">
+      <div class="step-head-main">
+        <div class="step-num">1</div>
+        <div>
+          <h2>Planilhas de controle de financiamento</h2>
+          <p class="step-sub">Importe uma ou mais planilhas (pode soltar vários arquivos de uma vez). Cada aba com o bloco "Competência / Saldo Juros a Apropriar CTB / Financiamento a pagar CTB" é lida automaticamente como um contrato. Abas sem esse bloco (ex.: parcelamentos de fornecedor, contratos ainda sem essa área preenchida) são ignoradas.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="dropzone" id="dz-financiamentos">
+      <input type="file" id="file-financiamentos" accept=".xlsx,.xls" multiple>
+      <strong>Clique ou arraste aqui as planilhas de financiamento (.xlsx)</strong>
+      <span>Pode selecionar vários arquivos ao mesmo tempo.</span>
+      <div id="chips-financiamentos"></div>
+    </div>
+
+    <div class="actions-row">
+      <span class="hint" id="hint-contratos-detectados"></span>
+    </div>
+  </div>
+
+  <div class="step-card" id="card-balancete" data-locked="true">
+    <div class="step-head">
+      <div class="step-head-main">
+        <div class="step-num">2</div>
+        <div>
+          <h2>Balancete do mês</h2>
+          <p class="step-sub">Importe o balancete para a ferramenta ler o saldo atual de cada conta de financiamento/juros e identificar quais contratos foram efetivados.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="dropzone" id="dz-balancete">
+      <input type="file" id="file-balancete" accept=".xlsx,.xls,.csv">
+      <strong>Clique ou arraste aqui o balancete (.xlsx ou .csv)</strong>
+      <span>Precisa ter as colunas CLASSIF., NOME DA CONTA, SALDO FINAL e a natureza D/C.</span>
+      <div id="chip-balancete"></div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="input-periodo">Período de referência</label>
+        <input type="month" id="input-periodo">
+        <span class="hint">Usado como último dia do mês na coluna "DATA LANÇAMENTO*".</span>
+      </div>
+      <div class="field">
+        <label for="input-empresa">Código empresa</label>
+        <input type="number" id="input-empresa" value="1">
+        <span class="hint">Usado na coluna "CÓDIGO EMPRESA*" do arquivo de importação.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="step-card" id="card-contratos" data-locked="true">
+    <div class="step-head">
+      <div class="step-head-main">
+        <div class="step-num">3</div>
+        <div>
+          <h2>Contas contábeis por contrato</h2>
+          <p class="step-sub">Preenchido automaticamente quando a planilha traz o código da conta; confira e complete o que faltar. Fica salvo neste navegador, associado ao nome da aba do contrato.</p>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn-secondary" id="btn-exportar-config">Exportar configuração (.json)</button>
+        <button class="btn-secondary" id="btn-importar-config">Importar configuração (.json)</button>
+        <input type="file" id="file-config" accept=".json" style="display:none;">
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Contrato</th>
+            <th>Competência da planilha</th>
+            <th>Conta Financiamento CP</th>
+            <th>Conta Financiamento LP</th>
+            <th>Conta Juros a Apropriar CP</th>
+            <th>Conta Juros a Apropriar LP</th>
+            <th>Status no balancete</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-contratos"></tbody>
+      </table>
+    </div>
+
+    <fieldset>
+      <legend>Contas e históricos comuns</legend>
+      <div class="field-row">
+        <div class="field">
+          <label for="input-conta-despesa-juros">Conta de despesa de juros/encargos financeiros</label>
+          <input type="text" class="mono" id="input-conta-despesa-juros" placeholder="0.0.0.00.0000">
+          <span class="hint">Recebe o débito da apropriação de juros do período.</span>
+        </div>
+        <div class="field">
+          <label for="input-historico-reclass">Histórico — reclassificação LP/CP</label>
+          <input type="text" class="mono" id="input-historico-reclass" placeholder="Ex: 250">
+        </div>
+        <div class="field">
+          <label for="input-historico-juros">Histórico — apropriação de juros</label>
+          <input type="text" class="mono" id="input-historico-juros" placeholder="Ex: 250">
+        </div>
+      </div>
+      <span class="hint" id="hint-config-saved" style="display:block; margin-top:10px;">A configuração é salva automaticamente neste navegador.</span>
+    </fieldset>
+  </div>
+
+  <div class="step-card" id="card-validacao" data-locked="true">
+    <div class="step-head">
+      <div class="step-head-main">
+        <div class="step-num">4</div>
+        <div>
+          <h2>Validação</h2>
+          <p class="step-sub">Contratos sem saldo em nenhuma das contas configuradas são tratados como "não efetivados" (empréstimo não liberado) e ficam de fora dos lançamentos.</p>
+        </div>
+      </div>
+    </div>
+    <div id="validacao-conteudo"></div>
+  </div>
+
+  <div class="step-card" id="card-preview" data-locked="true">
+    <div class="step-head">
+      <div class="step-head-main">
+        <div class="step-num">5</div>
+        <div>
+          <h2>Lançamentos gerados</h2>
+          <p class="step-sub">Confira as linhas antes de baixar a planilha de importação.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Contrato</th>
+            <th>Tipo</th>
+            <th>Conta débito</th>
+            <th>Conta crédito</th>
+            <th>Histórico</th>
+            <th>Complemento</th>
+            <th style="text-align:right;">Valor lançamento</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-preview"></tbody>
+      </table>
+    </div>
+
+    <div class="actions-row">
+      <span class="hint mono" id="nome-arquivo-preview"></span>
+      <button class="btn-primary" id="btn-baixar">Baixar planilha de importação (.xlsx)</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="toast-host" id="toast-host"></div>
+
+<script>
+(function(){
+  if (window.top === window.self) return;
+  if (window.claude && window.claude.use) return;
+  let proximoId = 1;
+  const pendentes = {};
+  window.addEventListener('message', (ev) => {
+    const msg = ev.data;
+    if (!msg || msg.__ponteClaude !== true || msg.tipo !== 'resposta') return;
+    const p = pendentes[msg.id];
+    if (!p) return;
+    delete pendentes[msg.id];
+    if (msg.erro) p.reject(msg.erro); else p.resolve(msg.resultado);
+  });
+  function chamarHub(acao, payload){
+    return new Promise((resolve, reject) => {
+      const id = proximoId++;
+      pendentes[id] = { resolve, reject };
+      window.parent.postMessage({ __ponteClaude: true, tipo: 'chamada', id, acao, payload }, '*');
+    });
+  }
+  window.claude = {
+    use: async (nome) => {
+      if (nome !== 'downloads') return null;
+      return { save: (req) => chamarHub('downloads.save', req) };
+    }
+  };
+})();
+
+async function salvarArquivo(filename, blob){
+  if (typeof window.claude !== 'undefined' && typeof window.claude.use === 'function'){
+    try{
+      const downloads = await window.claude.use('downloads');
+      if (downloads){ await downloads.save({ filename, data: blob }); return true; }
+    }catch(err){
+      showToast('Não foi possível salvar o arquivo (' + (err && (err.code || err.message) || 'erro') + ').', 'err');
+      return false;
+    }
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  return true;
+}
+
+function showToast(msg, type){
+  const host = document.getElementById('toast-host');
+  const el = document.createElement('div');
+  el.className = 'toast' + (type === 'err' ? ' toast-err' : type === 'ok' ? ' toast-ok' : '');
+  el.textContent = msg;
+  host.appendChild(el);
+  setTimeout(() => el.remove(), 5000);
+}
+
+// ---------- utilidades ----------
+function normalize(str){
+  return (str || '').toString()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function toNumber(v){
+  if (v === null || v === undefined || v === '') return 0;
+  if (typeof v === 'number') return v;
+  const n = parseFloat(String(v).replace(/\./g,'').replace(',', '.'));
+  return isNaN(n) ? 0 : n;
+}
+
+function round2(v){
+  return Math.round((v + Number.EPSILON) * 100) / 100;
+}
+
+function fmtBRL(v){
+  return (v || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'});
+}
+
+function fmtData(d){
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('pt-BR');
+}
+
+function uid(){
+  return 'id' + Math.random().toString(36).slice(2, 10);
+}
+
+function escapeAttr(s){
+  return (s === null || s === undefined ? '' : String(s))
+    .replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function sheetToMatrix(ws){
+  return XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true});
+}
+
+function setPill(id, cls){
+  const el = document.getElementById(id);
+  el.classList.remove('is-active','is-done');
+  if (cls) el.classList.add(cls);
+}
+
+function lastDayOfMonth(ano, mes){
+  return new Date(ano, mes, 0);
+}
+
+function dateToExcelSerial(date){
+  const utcDate = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const excelEpoch = Date.UTC(1899, 11, 30);
+  return Math.round((utcDate - excelEpoch) / 86400000);
+}
+
+function excelSerialToDate(serial){
+  const excelEpoch = Date.UTC(1899, 11, 30);
+  return new Date(excelEpoch + serial * 86400000);
+}
+
+// ---------- leitura de CSV (balancetes exportados direto do ERP) ----------
+function decodeBytesToText(buffer){
+  try{
+    return new TextDecoder('utf-8', {fatal:true}).decode(buffer);
+  }catch(e){
+    return new TextDecoder('iso-8859-1').decode(buffer);
+  }
+}
+
+function parseCsvLine(line, delim){
+  const result = [];
+  let cur = '';
+  let inQuotes = false;
+  for (let i=0;i<line.length;i++){
+    const ch = line[i];
+    if (inQuotes){
+      if (ch === '"'){
+        if (line[i+1] === '"'){ cur += '"'; i++; }
+        else inQuotes = false;
+      } else cur += ch;
+    } else {
+      if (ch === '"') inQuotes = true;
+      else if (ch === delim){ result.push(cur); cur = ''; }
+      else cur += ch;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+function csvMatrixTemUmCabecalhoValido(matrix){
+  return matrix.some(row => row.some(cell => {
+    const v = normalize(cell);
+    return v === 'CLASSIF.' || v === 'CLASSIF' || v === 'NOME DA CONTA' || v === 'SALDO FINAL';
+  }));
+}
+
+function parseCsvToMatrix(text){
+  const lines = text.split(/\r\n|\n|\r/);
+  for (const delim of [';', ',']){
+    const matrix = lines.map(line => parseCsvLine(line, delim));
+    if (csvMatrixTemUmCabecalhoValido(matrix)) return matrix;
+  }
+  return lines.map(line => parseCsvLine(line, ';'));
+}
+
+// ---------- parsing do balancete ----------
+let balancete = null; // { porCodigo: { codigo: {descricao, saldo} } }
+
+function parseBalanceteCompleto(matrix){
+  let colClassif=-1, colNome=-1, colSaldoFinal=-1, colSaldoFinalDC=-1;
+  for (const row of matrix){
+    for (let c=0;c<row.length;c++){
+      const v = normalize(row[c]);
+      if (v === 'CLASSIF.' || v === 'CLASSIF') colClassif = c;
+      if (v === 'NOME DA CONTA') colNome = c;
+      if (v === 'SALDO FINAL') colSaldoFinal = c;
+    }
+    if (colClassif>=0 && colNome>=0 && colSaldoFinal>=0) break;
+  }
+  const out = { porCodigo:{} };
+  if (colClassif<0 || colSaldoFinal<0) return out;
+  colSaldoFinalDC = colSaldoFinal + 1;
+
+  for (const row of matrix){
+    const codigo = (row[colClassif] || '').toString().trim();
+    if (!codigo) continue;
+    const valorBruto = toNumber(row[colSaldoFinal]);
+    const natureza = normalize(row[colSaldoFinalDC]);
+    let saldo = Math.abs(valorBruto);
+    if (natureza === 'C') saldo = -saldo;
+    if (natureza !== 'C' && natureza !== 'D') saldo = valorBruto;
+    out.porCodigo[codigo] = {
+      descricao: colNome >= 0 ? (row[colNome] || '').toString().trim() : '',
+      saldo: saldo
+    };
+  }
+  return out;
+}
+
+function saldoDaConta(codigo){
+  if (!balancete || !codigo) return null;
+  const c = balancete.porCodigo[(codigo || '').trim()];
+  return c ? c.saldo : null;
+}
+
+// ---------- parsing das planilhas de financiamento ----------
+const CODIGO_REGEX = /^\d\.\d\.\d\.\d{2}\.\d{4}$/;
+
+function classificarLabel(v){
+  const n = normalize(v);
+  if (!n) return null;
+  if (n.includes('COMPETENCIA')) return 'competencia';
+  const terminaCP = /(^|[^A-Z0-9])CP$/.test(n);
+  const terminaLP = /(^|[^A-Z0-9])LP$/.test(n);
+  if (n.includes('SALDO JUROS A APROPRIAR') && n.includes('CTB')){
+    if (terminaCP) return 'jurosCP';
+    if (terminaLP) return 'jurosLP';
+  }
+  if (n.includes('FINANCIAMENTO A PAGAR') && n.includes('CTB')){
+    if (terminaCP) return 'financCP';
+    if (terminaLP) return 'financLP';
+  }
+  return null;
+}
+
+function parseContratoSheet(matrix, nomeAba, nomeArquivo){
+  const achados = {};
+  for (let r=0;r<matrix.length;r++){
+    const row = matrix[r];
+    for (let c=0;c<row.length;c++){
+      const tipo = classificarLabel(row[c]);
+      if (!tipo) continue;
+      let valor = null, colValor = -1;
+      for (let cc=c+1; cc<row.length; cc++){
+        const cell = row[cc];
+        if (cell !== null && cell !== undefined && cell !== ''){ valor = cell; colValor = cc; break; }
+      }
+      if (valor === null) continue;
+      let codigo = '';
+      for (let cc=colValor+1; cc<Math.min(row.length, colValor+6); cc++){
+        const cell = row[cc];
+        if (typeof cell === 'string' && CODIGO_REGEX.test(cell.trim())){ codigo = cell.trim(); break; }
+      }
+      achados[tipo] = { valor, codigo };
+    }
+  }
+
+  const temBloco = achados.jurosCP || achados.jurosLP || achados.financCP || achados.financLP;
+  if (!temBloco) return null;
+
+  let competencia = null;
+  if (achados.competencia){
+    const v = achados.competencia.valor;
+    if (v instanceof Date) competencia = v;
+    else if (typeof v === 'number') competencia = excelSerialToDate(v);
+  }
+
+  return {
+    chave: nomeAba,
+    arquivo: nomeArquivo,
+    competencia: competencia,
+    jurosCP: achados.jurosCP ? toNumber(achados.jurosCP.valor) : null,
+    jurosLP: achados.jurosLP ? toNumber(achados.jurosLP.valor) : null,
+    financCP: achados.financCP ? toNumber(achados.financCP.valor) : null,
+    financLP: achados.financLP ? toNumber(achados.financLP.valor) : null,
+    codJurosCP: achados.jurosCP ? achados.jurosCP.codigo : '',
+    codJurosLP: achados.jurosLP ? achados.jurosLP.codigo : '',
+    codFinancCP: achados.financCP ? achados.financCP.codigo : '',
+    codFinancLP: achados.financLP ? achados.financLP.codigo : ''
+  };
+}
+
+// ---------- parsing da aba "Resumo" (planilha unificada de controle) ----------
+// A planilha unificada traz uma aba de painel com uma linha por contrato, já com os saldos-alvo
+// individuais de cada um (Financiamento/Juros x CP/LP) e os 4 códigos de conta contábil em uma
+// única célula de texto ("Juros CP: X | Juros LP: Y | Principal CP: Z | Principal LP: W"). Quando
+// essa aba existe, ela é usada como fonte única de verdade para o arquivo inteiro — em vez de
+// escanear cada aba de contrato individualmente — porque já traz o valor individual de cada
+// contrato (mesmo quando duas planilhas compartilham a mesma conta contábil, como acontece com
+// empréstimos irmãos do mesmo banco).
+function acharColunaResumo(headerRow, ...termos){
+  for (let c=0;c<headerRow.length;c++){
+    const n = normalize(headerRow[c]);
+    if (termos.some(t => n.includes(t))) return c;
+  }
+  return -1;
+}
+
+// Procura um termo em várias linhas candidatas (útil quando o cabeçalho da "Conta Contábil" está
+// dividido em duas linhas: uma linha de grupo e uma linha com os 4 sub-cabeçalhos individuais).
+function acharColunaMultiLinha(matrix, linhas, ...termos){
+  for (const li of linhas){
+    const row = matrix[li] || [];
+    for (let c=0;c<row.length;c++){
+      const n = normalize(row[c]);
+      if (termos.some(t => n.includes(t))) return { col: c, linha: li };
+    }
+  }
+  return { col: -1, linha: -1 };
+}
+
+function parseContaContabilTexto(texto){
+  const out = { codJurosCP:'', codJurosLP:'', codFinancCP:'', codFinancLP:'' };
+  if (!texto) return out;
+  const partes = String(texto).split('|');
+  partes.forEach(parte => {
+    const m = parte.split(':');
+    if (m.length < 2) return;
+    const label = normalize(m[0]);
+    const valor = m.slice(1).join(':').trim();
+    if (!CODIGO_REGEX.test(valor)) return;
+    if (label.includes('JUROS') && /(^|[^A-Z0-9])CP$/.test(label)) out.codJurosCP = valor;
+    else if (label.includes('JUROS') && /(^|[^A-Z0-9])LP$/.test(label)) out.codJurosLP = valor;
+    else if (label.includes('PRINCIPAL') && /(^|[^A-Z0-9])CP$/.test(label)) out.codFinancCP = valor;
+    else if (label.includes('PRINCIPAL') && /(^|[^A-Z0-9])LP$/.test(label)) out.codFinancLP = valor;
+  });
+  return out;
+}
+
+function acharLinhaCabecalhoResumo(matrix){
+  for (let r=0;r<matrix.length;r++){
+    const row = matrix[r] || [];
+    const temNome = row.some(cell => normalize(cell).includes('NOME DO EMPRESTIMO'));
+    if (!temNome) continue;
+    const temContaTexto = row.some(cell => normalize(cell).includes('CONTA CONTABIL'));
+    const proxima = matrix[r+1] || [];
+    const temSubCabecalhos = ['JUROS CP','JUROS LP','PRINCIPAL CP','PRINCIPAL LP'].every(termo =>
+      row.some(cell => normalize(cell).includes(termo)) || proxima.some(cell => normalize(cell).includes(termo))
+    );
+    if (temContaTexto || temSubCabecalhos) return r;
+  }
+  return -1;
+}
+
+function pareceResumo(matrix){
+  return acharLinhaCabecalhoResumo(matrix) >= 0;
+}
+
+function parseResumoSheet(matrix, nomeArquivo){
+  const linhaCab = acharLinhaCabecalhoResumo(matrix);
+  if (linhaCab < 0) return [];
+  const header = matrix[linhaCab];
+  const colNome = acharColunaResumo(header, 'NOME DO EMPRESTIMO');
+  const colUltimoPag = acharColunaResumo(header, 'DATA DO ULTIMO PAGAMENTO');
+  const colInicio = acharColunaResumo(header, 'DATA DE INICIO');
+  const colSaldoCPContrato = acharColunaResumo(header, 'SALDO CP - CONTRATOS', 'SALDO CP-CONTRATOS');
+  const colSaldoCPJuros = acharColunaResumo(header, 'SALDO CP - JUROS', 'SALDO CP-JUROS');
+  const colSaldoLPContrato = acharColunaResumo(header, 'SALDO LP - CONTRATOS', 'SALDO LP-CONTRATOS');
+  const colSaldoLPJuros = acharColunaResumo(header, 'SALDO LP - JUROS', 'SALDO LP-JUROS');
+  if (colNome < 0) return [];
+
+  // Formato novo: as 4 contas em colunas separadas (o cabeçalho de grupo "Conta Contábil" fica na
+  // linha do cabeçalho principal, e uma linha logo abaixo traz os 4 sub-títulos individuais).
+  // Formato antigo (compatibilidade): as 4 contas concatenadas em texto numa única coluna.
+  const linhasCandidatas = [linhaCab, linhaCab+1];
+  const rJurosCP = acharColunaMultiLinha(matrix, linhasCandidatas, 'JUROS CP');
+  const rJurosLP = acharColunaMultiLinha(matrix, linhasCandidatas, 'JUROS LP');
+  const rFinancCP = acharColunaMultiLinha(matrix, linhasCandidatas, 'PRINCIPAL CP');
+  const rFinancLP = acharColunaMultiLinha(matrix, linhasCandidatas, 'PRINCIPAL LP');
+  const temColunasSeparadas = rJurosCP.col>=0 && rJurosLP.col>=0 && rFinancCP.col>=0 && rFinancLP.col>=0;
+
+  const colContaContabil = temColunasSeparadas ? -1 : acharColunaResumo(header, 'CONTA CONTABIL');
+  if (!temColunasSeparadas && colContaContabil < 0) return [];
+
+  const linhaDados = temColunasSeparadas
+    ? Math.max(rJurosCP.linha, rJurosLP.linha, rFinancCP.linha, rFinancLP.linha) + 1
+    : linhaCab + 1;
+
+  const contratos = [];
+  for (let r=linhaDados; r<matrix.length; r++){
+    const row = matrix[r] || [];
+    const nome = (row[colNome] || '').toString().trim();
+    if (!nome) continue;
+    if (normalize(nome) === 'TOTAL') break;
+
+    const codigos = temColunasSeparadas
+      ? {
+          codJurosCP: (row[rJurosCP.col] || '').toString().trim(),
+          codJurosLP: (row[rJurosLP.col] || '').toString().trim(),
+          codFinancCP: (row[rFinancCP.col] || '').toString().trim(),
+          codFinancLP: (row[rFinancLP.col] || '').toString().trim()
+        }
+      : parseContaContabilTexto(colContaContabil>=0 ? row[colContaContabil] : '');
+    let competencia = null;
+    const dataRef = colUltimoPag>=0 ? row[colUltimoPag] : (colInicio>=0 ? row[colInicio] : null);
+    if (dataRef instanceof Date) competencia = dataRef;
+    else if (typeof dataRef === 'number') competencia = excelSerialToDate(dataRef);
+
+    const financCP = colSaldoCPContrato>=0 ? toNumber(row[colSaldoCPContrato]) : null;
+    const jurosCP = colSaldoCPJuros>=0 ? toNumber(row[colSaldoCPJuros]) : null;
+    const financLP = colSaldoLPContrato>=0 ? toNumber(row[colSaldoLPContrato]) : null;
+    const jurosLP = colSaldoLPJuros>=0 ? toNumber(row[colSaldoLPJuros]) : null;
+
+    contratos.push({
+      chave: nome,
+      arquivo: nomeArquivo,
+      competencia: competencia,
+      jurosCP: jurosCP,
+      jurosLP: jurosLP,
+      financCP: financCP,
+      financLP: financLP,
+      codJurosCP: codigos.codJurosCP,
+      codJurosLP: codigos.codJurosLP,
+      codFinancCP: codigos.codFinancCP,
+      codFinancLP: codigos.codFinancLP
+    });
+  }
+  return contratos;
+}
+
+// ---------- estado / configuração ----------
+const CONFIG_KEY = 'conciliador-financiamento-config-v1';
+let config = { contratos:{}, contaDespesaJuros:'3.1.5.02.0002', historicoReclass:'', historicoJuros:'' };
+let contratosDetectados = []; // resultado fresco do parse das planilhas importadas
+
+function loadConfig(){
+  try{
+    const raw = localStorage.getItem(CONFIG_KEY);
+    if (raw){
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object'){
+        config = Object.assign({ contratos:{}, contaDespesaJuros:'3.1.5.02.0002', historicoReclass:'', historicoJuros:'' }, parsed);
+        if (!config.contratos) config.contratos = {};
+      }
+    }
+  }catch(e){ /* localStorage indisponível - segue com o padrão em memória */ }
+}
+
+function saveConfig(){
+  try{
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
+    const el = document.getElementById('hint-config-saved');
+    el.className = 'hint ok';
+    el.textContent = 'Configuração salva neste navegador.';
+  }catch(e){
+    const el = document.getElementById('hint-config-saved');
+    el.className = 'hint warn';
+    el.textContent = 'Não foi possível salvar automaticamente neste navegador — use "Exportar configuração" para não perder o que fez.';
+  }
+}
+
+function garantirConfigContrato(ct){
+  let cfg = config.contratos[ct.chave];
+  if (!cfg){
+    cfg = { contaFinancCP: ct.codFinancCP || '', contaFinancLP: ct.codFinancLP || '', contaJurosCP: ct.codJurosCP || '', contaJurosLP: ct.codJurosLP || '' };
+    config.contratos[ct.chave] = cfg;
+  } else {
+    if (!cfg.contaFinancCP && ct.codFinancCP) cfg.contaFinancCP = ct.codFinancCP;
+    if (!cfg.contaFinancLP && ct.codFinancLP) cfg.contaFinancLP = ct.codFinancLP;
+    if (!cfg.contaJurosCP && ct.codJurosCP) cfg.contaJurosCP = ct.codJurosCP;
+    if (!cfg.contaJurosLP && ct.codJurosLP) cfg.contaJurosLP = ct.codJurosLP;
+  }
+  return cfg;
+}
+
+// ---------- UI: tabela de contratos ----------
+function renderContratos(){
+  const tbody = document.getElementById('tbody-contratos');
+  tbody.innerHTML = '';
+  contratosDetectados.forEach(ct => {
+    const cfg = garantirConfigContrato(ct);
+    const tr = document.createElement('tr');
+
+    let statusHtml = '<span class="tag tag-info">Importe o balancete</span>';
+    if (balancete){
+      const contas = [cfg.contaFinancCP, cfg.contaFinancLP, cfg.contaJurosCP, cfg.contaJurosLP].filter(Boolean);
+      const encontrados = contas.filter(c => saldoDaConta(c) !== null);
+      if (!contas.length){
+        statusHtml = '<span class="tag tag-err">Faltam códigos de conta</span>';
+      } else if (encontrados.length === 0){
+        statusHtml = '<span class="tag tag-info">Não efetivado no balancete</span>';
+      } else if (encontrados.length < contas.length){
+        statusHtml = '<span class="tag tag-err">Parcialmente encontrado</span>';
+      } else {
+        statusHtml = '<span class="tag tag-ok">Encontrado</span>';
+      }
+    }
+
+    tr.innerHTML =
+      '<td><strong>' + escapeAttr(ct.chave) + '</strong><br><span class="hint">' + escapeAttr(ct.arquivo) + '</span></td>' +
+      '<td class="mono">' + fmtData(ct.competencia) + '</td>' +
+      '<td>' + campoConta(ct.chave, 'contaFinancCP', cfg.contaFinancCP, ct.financCP) + '</td>' +
+      '<td>' + campoConta(ct.chave, 'contaFinancLP', cfg.contaFinancLP, ct.financLP) + '</td>' +
+      '<td>' + campoConta(ct.chave, 'contaJurosCP', cfg.contaJurosCP, ct.jurosCP) + '</td>' +
+      '<td>' + campoConta(ct.chave, 'contaJurosLP', cfg.contaJurosLP, ct.jurosLP) + '</td>' +
+      '<td>' + statusHtml + '</td>';
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('input[data-chave]').forEach(el => {
+    el.addEventListener('input', () => {
+      const cfg = config.contratos[el.dataset.chave];
+      if (!cfg) return;
+      cfg[el.dataset.field] = el.value;
+      saveConfig();
+      renderContratos();
+      atualizarCalculo();
+    });
+  });
+}
+
+function campoConta(chave, campo, valorAtual, valorAlvoDetectado){
+  if (valorAlvoDetectado === null){
+    return '<span class="hint">— (não detectado nessa planilha)</span>';
+  }
+  return '<input type="text" class="mono" data-chave="' + escapeAttr(chave) + '" data-field="' + campo + '" value="' + escapeAttr(valorAtual) + '" placeholder="0.0.0.00.0000">' +
+    '<div class="hint mono">Alvo: ' + fmtBRL(valorAlvoDetectado) + '</div>';
+}
+
+// ---------- cálculo ----------
+function montarLancamento(contrato, contaOrigem, contaDestino, diff, historico, complemento){
+  const valor = Math.abs(diff);
+  const debito = diff > 0 ? contaDestino : contaOrigem;
+  const credito = diff > 0 ? contaOrigem : contaDestino;
+  return { contrato, debito, credito, historico: historico || '', complemento: complemento || '', valor };
+}
+
+function calcularLancamentos(){
+  const lancamentos = [];
+  const avisos = [];
+  const naoEfetivados = [];
+  const despesa = (config.contaDespesaJuros || '').trim();
+
+  // Alguns contratos (ex.: dois empréstimos do mesmo banco lançados na mesma conta contábil)
+  // compartilham os mesmos códigos de conta entre si. Nesses casos, cada planilha traz seu
+  // próprio "alvo" e não dá pra gerar um lançamento por contrato sem contar o saldo da conta
+  // em dobro — por isso, quando uma mesma conta aparece em mais de um contrato, só o contrato
+  // com o maior valor de alvo (que normalmente é o bloco consolidado "soma dos empréstimos")
+  // é usado, e os demais ficam de fora com um aviso para revisão manual.
+  const candidatos = [];
+
+  contratosDetectados.forEach(ct => {
+    const cfg = config.contratos[ct.chave] || {};
+    const contaFinancCP = (cfg.contaFinancCP || '').trim();
+    const contaFinancLP = (cfg.contaFinancLP || '').trim();
+    const contaJurosCP = (cfg.contaJurosCP || '').trim();
+    const contaJurosLP = (cfg.contaJurosLP || '').trim();
+
+    // Um alvo detectado com valor exatamente 0 (ex.: contrato sem parcela de longo prazo)
+    // não exige conta configurada — não há nada a lançar para ele mesmo.
+    const faltando = [];
+    if (ct.financCP !== null && ct.financCP !== 0 && !contaFinancCP) faltando.push('Financiamento CP');
+    if (ct.financLP !== null && ct.financLP !== 0 && !contaFinancLP) faltando.push('Financiamento LP');
+    if (ct.jurosCP !== null && ct.jurosCP !== 0 && !contaJurosCP) faltando.push('Juros a Apropriar CP');
+    if (ct.jurosLP !== null && ct.jurosLP !== 0 && !contaJurosLP) faltando.push('Juros a Apropriar LP');
+    if (faltando.length){
+      avisos.push({tipo:'err', texto:'Contrato "' + ct.chave + '": falta configurar a conta de ' + faltando.join(', ') + '.'});
+      return;
+    }
+
+    const contas = [contaFinancCP, contaFinancLP, contaJurosCP, contaJurosLP].filter(Boolean);
+    const saldos = contas.map(c => saldoDaConta(c));
+    const encontrados = saldos.filter(s => s !== null);
+
+    if (!contas.length) return;
+    if (encontrados.length === 0){
+      naoEfetivados.push(ct.chave);
+      return;
+    }
+    if (encontrados.length < contas.length){
+      avisos.push({tipo:'err', texto:'Contrato "' + ct.chave + '": só parte das contas configuradas foi encontrada no balancete — confira os códigos.'});
+      return;
+    }
+
+    candidatos.push({ ct, contaFinancCP, contaFinancLP, contaJurosCP, contaJurosLP });
+  });
+
+  if (!despesa){
+    avisos.push({tipo:'err', texto:'Falta configurar a conta de despesa de juros/encargos financeiros.'});
+    return { lancamentos, avisos, naoEfetivados };
+  }
+
+  // Agrupa candidatos por conta contábil (chaveConta) e soma os alvos do grupo — cada contrato já
+  // traz seu valor individual (a planilha unificada resolve a divisão entre empréstimos-irmãos
+  // que compartilham a mesma conta), então o lançamento correto por conta é sempre a soma dos
+  // alvos dos contratos que apontam pra ela, nunca o de um único contrato "vencedor".
+  function agruparPorConta(chaveConta, alvoDe, chaveSecundaria){
+    const porConta = new Map();
+    candidatos.forEach(c => {
+      const conta = c[chaveConta];
+      const alvo = alvoDe(c.ct);
+      if (!conta || alvo === null) return;
+      if (chaveSecundaria && !c[chaveSecundaria]) return;
+      const chave = chaveSecundaria ? conta + '>' + c[chaveSecundaria] : conta;
+      if (!porConta.has(chave)) porConta.set(chave, { conta, contaSecundaria: chaveSecundaria ? c[chaveSecundaria] : null, itens: [] });
+      porConta.get(chave).itens.push({ ct: c.ct, alvo });
+    });
+    const grupos = [];
+    porConta.forEach(grupo => {
+      if (grupo.itens.length > 1){
+        const nomes = grupo.itens.map(i => '"' + i.ct.chave + '" (' + fmtBRL(i.alvo) + ')').join(', ');
+        avisos.push({tipo:'info', texto:'A conta ' + grupo.conta + ' é usada por mais de um contrato: ' + nomes + '. Os valores foram somados em um único lançamento — confira se isso reflete a realidade (ex.: empréstimos do mesmo banco/linha compartilhando a conta).'});
+      }
+      grupos.push({
+        conta: grupo.conta,
+        contaSecundaria: grupo.contaSecundaria,
+        alvoTotal: round2(grupo.itens.reduce((s, i) => s + i.alvo, 0)),
+        nomes: grupo.itens.map(i => i.ct.chave).join(' + ')
+      });
+    });
+    return grupos;
+  }
+
+  const gruposReclass = agruparPorConta('contaFinancCP', ct => ct.financCP !== null ? Math.abs(ct.financCP) : null, 'contaFinancLP');
+  gruposReclass.forEach(g => {
+    // "Financiamento a pagar" é conta de natureza credora (passivo): a planilha traz o valor em
+    // módulo, então o alvo precisa ser negativado para casar com a convenção D+/C- do balancete.
+    const saldoAtual = saldoDaConta(g.conta) || 0;
+    const alvo = -g.alvoTotal;
+    const diff = round2(saldoAtual - alvo);
+    if (diff !== 0){
+      lancamentos.push(montarLancamento(g.nomes, g.conta, g.contaSecundaria, diff, config.historicoReclass, 'RECLASSIFICACAO FINANCIAMENTO LP/CP - ' + g.nomes));
+    }
+  });
+
+  const gruposJurosCP = agruparPorConta('contaJurosCP', ct => ct.jurosCP !== null ? ct.jurosCP : null);
+  gruposJurosCP.forEach(g => {
+    const saldoAtual = saldoDaConta(g.conta) || 0;
+    const diff = round2(saldoAtual - g.alvoTotal);
+    if (diff !== 0){
+      lancamentos.push(montarLancamento(g.nomes, g.conta, despesa, diff, config.historicoJuros, 'APROPRIACAO DE JUROS CP - ' + g.nomes));
+    }
+  });
+
+  const gruposJurosLP = agruparPorConta('contaJurosLP', ct => ct.jurosLP !== null ? ct.jurosLP : null);
+  gruposJurosLP.forEach(g => {
+    const saldoAtual = saldoDaConta(g.conta) || 0;
+    const diff = round2(saldoAtual - g.alvoTotal);
+    if (diff !== 0){
+      lancamentos.push(montarLancamento(g.nomes, g.conta, despesa, diff, config.historicoJuros, 'APROPRIACAO DE JUROS LP - ' + g.nomes));
+    }
+  });
+
+  return { lancamentos, avisos, naoEfetivados };
+}
+
+let resultadoAtual = { lancamentos: [], avisos: [], naoEfetivados: [] };
+
+function atualizarCalculo(){
+  if (!balancete || !contratosDetectados.length) return;
+  resultadoAtual = calcularLancamentos();
+  renderValidacao();
+  renderPreview();
+  setPill('pill-4', 'is-done');
+  setPill('pill-5', 'is-done');
+}
+
+function renderValidacao(){
+  const conteudo = document.getElementById('validacao-conteudo');
+  const itens = [];
+  resultadoAtual.avisos.forEach(a => itens.push(a));
+  resultadoAtual.naoEfetivados.forEach(chave => {
+    itens.push({tipo:'info', texto:'Contrato "' + chave + '": nenhuma conta encontrada no balancete — considerado não efetivado (empréstimo não liberado neste período).'});
+  });
+  if (!resultadoAtual.lancamentos.length && !itens.length){
+    itens.push({tipo:'warn', texto:'Nenhum lançamento foi gerado. Confira as planilhas importadas e as contas configuradas.'});
+  }
+  if (!itens.length){
+    conteudo.innerHTML = '<div class="empty-state"><div class="big">✅</div>Nenhuma pendência encontrada.</div>';
+    return;
+  }
+  const lista = document.createElement('div');
+  lista.className = 'check-list';
+  itens.forEach(a => {
+    const div = document.createElement('div');
+    div.className = 'check-item ' + a.tipo;
+    div.textContent = a.texto;
+    lista.appendChild(div);
+  });
+  conteudo.innerHTML = '';
+  conteudo.appendChild(lista);
+}
+
+function renderPreview(){
+  const tbody = document.getElementById('tbody-preview');
+  tbody.innerHTML = '';
+  resultadoAtual.lancamentos.forEach(l => {
+    const tipo = l.complemento.includes('APROPRIACAO DE JUROS') ? 'Apropriação de juros' : 'Reclassificação LP/CP';
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>' + escapeAttr(l.contrato) + '</td>' +
+      '<td><span class="tag tag-debito">' + escapeAttr(tipo) + '</span></td>' +
+      '<td class="mono">' + escapeAttr(l.debito) + '</td>' +
+      '<td class="mono">' + escapeAttr(l.credito) + '</td>' +
+      '<td class="mono">' + escapeAttr(l.historico) + '</td>' +
+      '<td>' + escapeAttr(l.complemento) + '</td>' +
+      '<td class="num mono">' + fmtBRL(l.valor) + '</td>';
+    tbody.appendChild(tr);
+  });
+
+  const periodoStr = document.getElementById('input-periodo').value;
+  let nomeArquivo = 'Lancamentos Financiamento.xlsx';
+  if (periodoStr){
+    const [ano, mes] = periodoStr.split('-').map(Number);
+    nomeArquivo = 'Lancamentos Financiamento ' + String(mes).padStart(2,'0') + ano + '.xlsx';
+  }
+  window.__nomeArquivoAtual = nomeArquivo;
+  document.getElementById('nome-arquivo-preview').textContent = nomeArquivo;
+  document.getElementById('btn-baixar').disabled = !resultadoAtual.lancamentos.length;
+}
+
+function gerarWorkbook(){
+  const periodoStr = document.getElementById('input-periodo').value;
+  let dataLancamento = null;
+  if (periodoStr){
+    const [ano, mes] = periodoStr.split('-').map(Number);
+    dataLancamento = lastDayOfMonth(ano, mes);
+  }
+  const codigoEmpresa = parseFloat(document.getElementById('input-empresa').value) || 1;
+
+  const header = ['CÓDIGO EMPRESA*','DATA LANÇAMENTO*','CONTA DEBITO','CONTA CREDITO','CÓDIGO HISTÓRICO PADRÃO','COMPLEMENTO','VALOR LANÇAMENTO*','CENTRO CUSTO DEBITO','CENTRO CUSTO CREDITO','CÓDIGO AGRUPADOR'];
+  const aoa = [header];
+  resultadoAtual.lancamentos.forEach(l => {
+    aoa.push([codigoEmpresa, null, l.debito, l.credito, l.historico || '', l.complemento, round2(l.valor), '', '', '']);
+  });
+
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  if (dataLancamento){
+    const serial = dateToExcelSerial(dataLancamento);
+    for (let i=0;i<resultadoAtual.lancamentos.length;i++){
+      const ref = XLSX.utils.encode_cell({ r: i+1, c: 1 });
+      ws[ref] = { t:'n', v: serial, z:'dd/mm/yyyy' };
+    }
+  }
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Planilha1');
+  return wb;
+}
+
+// ---------- estado geral / desbloqueio ----------
+function atualizarEstadoGeral(){
+  if (contratosDetectados.length){
+    document.getElementById('card-balancete').removeAttribute('data-locked');
+    document.getElementById('card-contratos').removeAttribute('data-locked');
+    setPill('pill-1', 'is-done');
+    setPill('pill-2', balancete ? 'is-done' : 'is-active');
+  }
+  if (balancete){
+    document.getElementById('card-validacao').removeAttribute('data-locked');
+    document.getElementById('card-preview').removeAttribute('data-locked');
+    setPill('pill-3', 'is-done');
+    atualizarCalculo();
+  }
+  renderContratos();
+}
+
+// ---------- eventos: dropzone de múltiplas planilhas de financiamento ----------
+const dzFin = document.getElementById('dz-financiamentos');
+const inputFin = document.getElementById('file-financiamentos');
+dzFin.addEventListener('click', () => inputFin.click());
+inputFin.addEventListener('change', () => processarArquivosFinanciamento(inputFin.files));
+dzFin.addEventListener('dragover', e => { e.preventDefault(); dzFin.classList.add('is-dragover'); });
+dzFin.addEventListener('dragleave', () => dzFin.classList.remove('is-dragover'));
+dzFin.addEventListener('drop', e => {
+  e.preventDefault();
+  dzFin.classList.remove('is-dragover');
+  processarArquivosFinanciamento(e.dataTransfer.files);
+});
+
+function processarArquivosFinanciamento(fileList){
+  const arquivos = Array.from(fileList || []);
+  if (!arquivos.length) return;
+  const chipsHost = document.getElementById('chips-financiamentos');
+  let pendentes = arquivos.length;
+  arquivos.forEach(file => {
+    const chip = document.createElement('span');
+    chip.className = 'file-chip';
+    chip.textContent = '📄 ' + file.name;
+    chipsHost.appendChild(chip);
+
+    const reader = new FileReader();
+    reader.onload = e => {
+      const data = new Uint8Array(e.target.result);
+      const wb = XLSX.read(data, {type:'array', cellDates:true});
+
+      // Planilha unificada de controle: se alguma aba tem o painel "Resumo" (uma linha por
+      // contrato, já com os valores individuais e os 4 códigos de conta), ela é usada como fonte
+      // única para o arquivo inteiro — mais confiável do que escanear cada aba de contrato, e sem
+      // o risco de contar em dobro contratos que compartilham a mesma conta contábil.
+      let nomeAbaResumo = null;
+      for (const nomeAba of wb.SheetNames){
+        const matrix = sheetToMatrix(wb.Sheets[nomeAba]);
+        if (pareceResumo(matrix)){ nomeAbaResumo = nomeAba; break; }
+      }
+
+      function registrar(contrato){
+        if (!contrato) return;
+        const existente = contratosDetectados.findIndex(c => c.chave === contrato.chave);
+        if (existente >= 0) contratosDetectados[existente] = contrato;
+        else contratosDetectados.push(contrato);
+      }
+
+      if (nomeAbaResumo){
+        const matrizResumo = sheetToMatrix(wb.Sheets[nomeAbaResumo]);
+        parseResumoSheet(matrizResumo, file.name).forEach(registrar);
+      } else {
+        wb.SheetNames.forEach(nomeAba => {
+          const matrix = sheetToMatrix(wb.Sheets[nomeAba]);
+          registrar(parseContratoSheet(matrix, nomeAba, file.name));
+        });
+      }
+      pendentes--;
+      if (pendentes === 0){
+        const hint = document.getElementById('hint-contratos-detectados');
+        hint.textContent = contratosDetectados.length
+          ? contratosDetectados.length + ' contrato(s) detectado(s): ' + contratosDetectados.map(c => c.chave).join(', ')
+          : 'Nenhum contrato com o bloco de Competência/Saldo foi encontrado nos arquivos importados.';
+        hint.className = contratosDetectados.length ? 'hint ok' : 'hint warn';
+        atualizarEstadoGeral();
+        showToast(contratosDetectados.length + ' contrato(s) detectado(s).', 'ok');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// ---------- balancete ----------
+function processarMatrizBalancete(matrix){
+  balancete = parseBalanceteCompleto(matrix);
+  if (!Object.keys(balancete.porCodigo).length){
+    showToast('Não consegui localizar as colunas "CLASSIF.", "NOME DA CONTA" e "SALDO FINAL" nesse arquivo.', 'err');
+    return;
+  }
+  atualizarEstadoGeral();
+  showToast('Balancete importado com sucesso.', 'ok');
+}
+
+function setupDropzone(dzId, inputId, onFile){
+  const dz = document.getElementById(dzId);
+  const input = document.getElementById(inputId);
+  dz.addEventListener('click', () => input.click());
+  input.addEventListener('change', () => { if (input.files[0]) onFile(input.files[0]); });
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('is-dragover'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('is-dragover'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault();
+    dz.classList.remove('is-dragover');
+    if (e.dataTransfer.files[0]) onFile(e.dataTransfer.files[0]);
+  });
+}
+
+setupDropzone('dz-balancete', 'file-balancete', file => {
+  document.getElementById('chip-balancete').innerHTML = '<span class="file-chip">📄 ' + file.name + '</span>';
+  const isCsv = /\.csv$/i.test(file.name);
+  const reader = new FileReader();
+  reader.onload = e => {
+    if (isCsv){
+      const texto = decodeBytesToText(e.target.result);
+      processarMatrizBalancete(parseCsvToMatrix(texto));
+      return;
+    }
+    const data = new Uint8Array(e.target.result);
+    const wb = XLSX.read(data, {type:'array', cellDates:false});
+    const ws = wb.Sheets[wb.SheetNames.find(n => normalize(n).includes('BALANCETE'))] || wb.Sheets[wb.SheetNames[0]];
+    processarMatrizBalancete(sheetToMatrix(ws));
+  };
+  reader.readAsArrayBuffer(file);
+});
+
+['input-periodo','input-empresa'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => { if (balancete) renderPreview(); });
+});
+
+document.getElementById('input-conta-despesa-juros').addEventListener('input', e => {
+  config.contaDespesaJuros = e.target.value;
+  saveConfig();
+  atualizarCalculo();
+});
+document.getElementById('input-historico-reclass').addEventListener('input', e => {
+  config.historicoReclass = e.target.value;
+  saveConfig();
+  atualizarCalculo();
+});
+document.getElementById('input-historico-juros').addEventListener('input', e => {
+  config.historicoJuros = e.target.value;
+  saveConfig();
+  atualizarCalculo();
+});
+
+document.getElementById('btn-exportar-config').addEventListener('click', async () => {
+  const blob = new Blob([JSON.stringify(config, null, 2)], {type:'application/json'});
+  await salvarArquivo('configuracao-conciliador-financiamento.json', blob);
+});
+document.getElementById('btn-importar-config').addEventListener('click', () => {
+  document.getElementById('file-config').click();
+});
+document.getElementById('file-config').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try{
+      const parsed = JSON.parse(ev.target.result);
+      if (!parsed || typeof parsed !== 'object') throw new Error('formato inválido');
+      config = Object.assign({ contratos:{}, contaDespesaJuros:'3.1.5.02.0002', historicoReclass:'', historicoJuros:'' }, parsed);
+      if (!config.contratos) config.contratos = {};
+      saveConfig();
+      preencherCamposComuns();
+      renderContratos();
+      atualizarCalculo();
+      showToast('Configuração importada com sucesso.', 'ok');
+    }catch(err){
+      showToast('Não consegui ler esse arquivo de configuração.', 'err');
+    }
+  };
+  reader.readAsText(file);
+});
+
+document.getElementById('btn-baixar').addEventListener('click', async () => {
+  if (!resultadoAtual.lancamentos.length) return;
+  const wb = gerarWorkbook();
+  const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+  const blob = new Blob([wbout], {type:'application/octet-stream'});
+  const nomeArquivo = window.__nomeArquivoAtual || 'Lancamentos Financiamento.xlsx';
+  const ok = await salvarArquivo(nomeArquivo, blob);
+  if (ok) showToast('Arquivo gerado: ' + nomeArquivo, 'ok');
+});
+
+function preencherCamposComuns(){
+  document.getElementById('input-conta-despesa-juros').value = config.contaDespesaJuros || '';
+  document.getElementById('input-historico-reclass').value = config.historicoReclass || '';
+  document.getElementById('input-historico-juros').value = config.historicoJuros || '';
+}
+
+// ---------- inicialização ----------
+loadConfig();
+preencherCamposComuns();
+setPill('pill-1', 'is-active');
+</script>
+</body>
+</html>
