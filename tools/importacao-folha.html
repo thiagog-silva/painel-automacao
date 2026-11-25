@@ -136,28 +136,18 @@ details summary{cursor:pointer;font-weight:600;font-size:14px;margin-bottom:8px;
   </div>
 
   <div class="card">
-    <h2>Empresa ativa</h2>
+    <h2>Empresa</h2>
     <div class="row" style="align-items:flex-end;">
       <div style="flex:2;min-width:240px;">
-        <label class="small">Perfil (empresa)</label><br>
-        <select id="profileSelect"></select>
+        <label class="small">Empresa identificada no Resumo Folha</label><br>
+        <div id="empresaNome" style="font-weight:600;padding:8px 0;"></div>
       </div>
       <div style="flex:1;min-width:120px;">
-        <label class="small">Código empresa (contábil)</label><br>
+        <label class="small">Código empresa na planilha</label><br>
         <input type="text" id="codigoEmpresaInput">
       </div>
-      <div style="flex:0 0 auto;display:flex;gap:8px;">
-        <button class="secondary" id="btnNovaEmpresa">+ Nova empresa</button>
-        <button class="secondary" id="btnRenomearEmpresa">Renomear</button>
-        <button class="secondary" id="btnExcluirEmpresa">Excluir</button>
-      </div>
     </div>
-    <div class="row" style="margin-top:10px;">
-      <label class="small" style="display:flex;align-items:center;gap:6px;">
-        <input type="checkbox" id="autoDetectCheckbox" checked style="width:auto;">
-        Detectar a empresa automaticamente pelo nome no Resumo Folha
-      </label>
-    </div>
+    <div class="small" style="margin-top:8px;">A base de eventos e contas é única para todas as empresas do grupo (mesmo plano de contas). O código serve só para preencher a coluna CÓDIGO EMPRESA.</div>
     <div id="empresaMsg" class="small" style="margin-top:6px;"></div>
   </div>
 
@@ -327,6 +317,52 @@ const DEFAULT_MAPPING = {"13o Salário Adiantado":{"tipo":"especial","debito":"1
 
 const DEFAULT_IGNORE = ["Horas Faltas","Horas Faltas DSR","Horas Auxílio Doença","Total de Comissão + DSR","eConsignado CLT Ñ Desc","eConsignado 2 CLT Ñ Desc"];
 
+/* =========================================================================
+   BASE ÚNICA — todas as empresas do grupo usam o MESMO plano de contas, então há uma
+   só base de eventos e uma só lista de ignorados. O código da empresa serve apenas para
+   preencher a coluna CÓDIGO EMPRESA da planilha de importação.
+   Eventos abaixo são acrescentados à base padrão (não sobrescrevem ajustes salvos).
+   ========================================================================= */
+const BASE_EXTRA = {
+      // adiantamento salarial (mesma conta de "Desconto de Adiantamentos")
+      "Desconto Adto Salarial":      {"tipo":"desconto","conta":"1.1.3.01.0002"},
+      "Desconto Adto. Salarial":     {"tipo":"desconto","conta":"1.1.3.01.0002"},
+      // pró-labore: despesa x passivo próprio; o INSS do pró-labore baixa esse passivo
+      "Pró-Labore":                  {"tipo":"especial","debito":"3.1.3.01.0031","credito":"2.1.1.01.0011"},
+      "INSS Individual Pro-Labor":   {"tipo":"especial","debito":"2.1.1.01.0011","credito":"2.1.1.01.0007"},
+      // INSS sobre 13º (igual a "INSS 13o Salário")
+      "INSS s/ 13º Salário":         {"tipo":"desconto","conta":"2.1.1.01.0007"},
+      // rescisão
+      "Ind.Térm.Contr.Antec.Empr":   {"tipo":"provento","conta":"3.1.3.01.0002"},
+      "FGTS A.P.I. Dep":             {"tipo":"especial","debito":"3.1.3.01.0008","credito":"2.1.1.01.0008"},
+      "FGTS 40% Resc.Depositado":    {"tipo":"especial","debito":"3.1.3.01.0008","credito":"2.1.1.01.0008"},
+      "FGTS 13º Sal.Resc.Dep.":      {"tipo":"especial","debito":"2.1.5.01.0003","credito":"2.1.1.01.0008"},
+      // contribuição assistencial (igual a "Mensalidade Sindical")
+      "Contrib.Assistencial":        {"tipo":"desconto","conta":"2.1.1.01.0013"},
+      // provisão de consignado do adiantamento: desconto e estorno de mesmo valor (efeito líquido zero)
+      "Desc Prov eConsig Adto":      {"tipo":"desconto","conta":"2.1.1.01.0008"},
+      "Estorno Prov eConsig Adto":   {"tipo":"provento","conta":"2.1.1.01.0008"},
+      // trocos
+      "Troco Mes":                   {"tipo":"provento","conta":"3.1.3.01.0001"},
+      "Troco Mes Socio":             {"tipo":"provento","conta":"3.1.3.01.0001"},
+      "Troco Mes Antr Socio":        {"tipo":"desconto","conta":"3.1.3.01.0001"},
+      // horas extras
+      "Horas Extras c/ 65%":         {"tipo":"provento","conta":"3.1.3.01.0003"}
+    };
+const IGNORE_EXTRA = ["Horas Faltas(Demonstrat.)"];
+// Correções que SOBRESCREVEM o que estiver salvo no navegador (aplicadas uma única vez por versão).
+// Depois de aplicadas, qualquer ajuste manual feito na tabela volta a valer normalmente.
+const BASE_CORRECAO_V2_KEY = 'folhaImport_correcao_prolabore_v2';
+const BASE_CORRECAO_V2 = {
+  "Pró-Labore":                {"tipo":"especial","debito":"3.1.3.01.0031","credito":"2.1.1.01.0011"},
+  "INSS Individual Pro-Labor": {"tipo":"especial","debito":"2.1.1.01.0011","credito":"2.1.1.01.0007"}
+};
+// código da empresa na planilha de importação (identificada pelo nome no Resumo Folha)
+const EMPRESAS_PADRAO = {
+  "BEIJA FLOR COMERCIO DE TINTAS LTDA": 1,
+  "BF CONSTRUTORA E INCORPORADORA LTDA": 99
+};
+
 /* Correção pontual (24/11/2026): os 11 eventos do 13º Adiantamento haviam sido
    cadastrados com contas erradas (debitavam a provisão/despesa em vez de
    Adiantamento de 13º x 13º a Pagar). Este bloco corrige automaticamente
@@ -362,70 +398,106 @@ function familySuggestion(nome){
   return null;
 }
 
+// Chave de comparação de eventos: ignora acento, maiúscula/minúscula, aspas, pontuação e espaços.
+// Assim "13º Salário Proporc.Resc." (099) casa com "13o Salário Proporc.Resc" (Tintas),
+// "Rescisäo" com "Rescisão", "\"Troco Mes Anterior\"" com "Troco Mês Anterior" etc.
+function normEvt(s){
+  return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[º°ª]/g,'o').replace(/ä/gi,'a').toLowerCase().replace(/[^a-z0-9\/%]/g,'');
+}
+function mapKeyFor(mp, nome){
+  if(mp[nome]) return nome;
+  const k = normEvt(nome);
+  for(const n in mp){ if(normEvt(n) === k) return n; }
+  return null;
+}
+function isIgnoredName(lista, nome){
+  if(lista.includes(nome)) return true;
+  const k = normEvt(nome);
+  return lista.some(n => normEvt(n) === k);
+}
+
 // Rótulos de seção/ruído que nunca são eventos financeiros
 const SECTION_LABELS = new Set(["Provento","Desconto","Vantagem","Outros","Outros Env.Desconto"]);
 
 /* =========================================================================
-   PERFIS DE EMPRESA — cada empresa tem sua própria base de eventos, lista de
-   ignorados e código empresa contábil. O perfil é identificado pelo NOME da
-   empresa (igual ao que aparece no Resumo Folha), permitindo detecção automática.
+   BASE ÚNICA + CÓDIGO DA EMPRESA
    ========================================================================= */
-let profiles = {};
-let activeProfileName = null;
+const KEY_BASE = 'folhaImport_base_v2';
+const KEY_EMPRESAS = 'folhaImport_empresas_v2';
 let mapping = null;
 let ignoreList = null;
+let empresas = {};            // nome da empresa -> código (só para a coluna da planilha)
+let nomeEmpresaAtual = null;
 let codigoEmpresaAtual = 1;
 let lastParse = null; // {rawEvents, gpsValues, periodEnd, companyName}
 let pendingResolutions = {}; // nome -> {acao, conta}
 
-function loadProfiles(){
-  try{
-    const s = localStorage.getItem('folhaImport_profiles');
-    if(s) profiles = JSON.parse(s);
-  }catch(e){}
-  if(!profiles || Object.keys(profiles).length === 0){
-    profiles = {};
-    profiles[DEFAULT_PROFILE_NAME] = {
-      codigoEmpresa: 1,
-      mapping: JSON.parse(JSON.stringify(DEFAULT_MAPPING)),
-      ignoreList: DEFAULT_IGNORE.slice()
-    };
-    saveProfiles();
+function baseCompleta(){
+  return Object.assign(JSON.parse(JSON.stringify(DEFAULT_MAPPING)), JSON.parse(JSON.stringify(BASE_EXTRA)));
+}
+function lerJSON(chave){ try{ const t = localStorage.getItem(chave); return t ? JSON.parse(t) : null; }catch(e){ return null; } }
+
+function loadBase(){
+  const padrao = baseCompleta();
+  let salvo = lerJSON(KEY_BASE);
+  let empSalvas = lerJSON(KEY_EMPRESAS) || {};
+  if(!salvo){
+    // migração: junta os perfis por empresa de versões anteriores numa base única
+    // (a empresa principal é aplicada por último; ajustes manuais de qualquer perfil são mantidos)
+    const antigos = lerJSON('folhaImport_profiles');
+    salvo = {mapping:{}, ignoreList:[]};
+    if(antigos){
+      const nomes = Object.keys(antigos).sort((a,b)=> (a===DEFAULT_PROFILE_NAME) - (b===DEFAULT_PROFILE_NAME));
+      nomes.forEach(function(n){
+        const pf = antigos[n] || {};
+        Object.assign(salvo.mapping, pf.mapping || {});
+        (pf.ignoreList || []).forEach(function(ev){ if(!isIgnoredName(salvo.ignoreList, ev)) salvo.ignoreList.push(ev); });
+        if(pf.codigoEmpresa !== undefined && pf.codigoEmpresa !== '') empSalvas[n] = pf.codigoEmpresa;
+      });
+    }
   }
+  mapping = Object.assign({}, salvo.mapping || {});
+  ignoreList = (salvo.ignoreList || []).slice();
+  // completa com a base padrão o que ainda não existir (sem sobrescrever ajustes)
+  Object.keys(padrao).forEach(function(ev){ if(!mapKeyFor(mapping, ev)) mapping[ev] = padrao[ev]; });
+  DEFAULT_IGNORE.concat(IGNORE_EXTRA).forEach(function(ev){ if(!isIgnoredName(ignoreList, ev)) ignoreList.push(ev); });
+  // correção pontual do 13º adiantamento (uma vez só)
   try{
     if(!localStorage.getItem(MIGRATION_13_ADTO_KEY)){
-      let changed = false;
-      Object.keys(profiles).forEach(function(nomePerfil){
-        const p = profiles[nomePerfil];
-        if(p && p.mapping){
-          Object.keys(MIGRATION_13_ADTO_FIX).forEach(function(evento){
-            p.mapping[evento] = JSON.parse(JSON.stringify(MIGRATION_13_ADTO_FIX[evento]));
-            changed = true;
-          });
-        }
-      });
-      if(changed) saveProfiles();
+      Object.keys(MIGRATION_13_ADTO_FIX).forEach(function(ev){ mapping[ev] = JSON.parse(JSON.stringify(MIGRATION_13_ADTO_FIX[ev])); });
       localStorage.setItem(MIGRATION_13_ADTO_KEY, '1');
     }
   }catch(e){}
-  let active = null;
-  try{ active = localStorage.getItem('folhaImport_activeProfile'); }catch(e){}
-  if(!active || !profiles[active]) active = Object.keys(profiles)[0];
-  activeProfileName = active;
-  applyActiveProfile();
+  // correção forçada do Pró-Labore (remove versões antigas/erradas do mesmo evento e grava a correta)
+  try{
+    if(!localStorage.getItem(BASE_CORRECAO_V2_KEY)){
+      Object.keys(BASE_CORRECAO_V2).forEach(function(ev){
+        const k = normEvt(ev);
+        Object.keys(mapping).forEach(function(n){ if(normEvt(n) === k) delete mapping[n]; });
+        mapping[ev] = JSON.parse(JSON.stringify(BASE_CORRECAO_V2[ev]));
+      });
+      localStorage.setItem(BASE_CORRECAO_V2_KEY, '1');
+    }
+  }catch(e){}
+  empresas = Object.assign({}, EMPRESAS_PADRAO, empSalvas);
+  saveBase(); saveEmpresas();
 }
-function saveProfiles(){ try{ localStorage.setItem('folhaImport_profiles', JSON.stringify(profiles)); }catch(e){} }
-function saveActiveProfileName(){ try{ localStorage.setItem('folhaImport_activeProfile', activeProfileName); }catch(e){} }
-function applyActiveProfile(){
-  const p = profiles[activeProfileName];
-  mapping = p.mapping;
-  ignoreList = p.ignoreList;
-  codigoEmpresaAtual = p.codigoEmpresa;
-  saveActiveProfileName();
+function saveBase(){ try{ localStorage.setItem(KEY_BASE, JSON.stringify({mapping, ignoreList})); }catch(e){} }
+function saveEmpresas(){ try{ localStorage.setItem(KEY_EMPRESAS, JSON.stringify(empresas)); }catch(e){} }
+function saveMapping(){ saveBase(); }
+function saveIgnore(){ saveBase(); }
+// "099" / "99" / 99 -> 99 (número, como a planilha de importação espera); texto só se não for numérico
+function codigoParaPlanilha(v){
+  const t = String(v === undefined || v === null ? '' : v).trim();
+  return /^\d+$/.test(t) ? parseInt(t, 10) : t;
 }
-function saveMapping(){ profiles[activeProfileName].mapping = mapping; saveProfiles(); }
-function saveIgnore(){ profiles[activeProfileName].ignoreList = ignoreList; saveProfiles(); }
-function saveCodigoEmpresa(){ profiles[activeProfileName].codigoEmpresa = codigoEmpresaAtual; saveProfiles(); }
+function codigoDaEmpresa(nome){
+  if(empresas[nome] !== undefined) return empresas[nome];
+  const k = normEvt(nome);
+  for(const n in empresas){ if(normEvt(n) === k) return empresas[n]; }
+  return undefined;
+}
 
 function brToFloat(v){
   if(v===null||v===undefined) return null;
@@ -473,7 +545,7 @@ function parseResumo(aoa){
     if(!nome) return;
     if(SECTION_LABELS.has(nome)) return;
     if(valor === null) return;
-    if(ignoreList.includes(nome)){
+    if(isIgnoredName(ignoreList, nome)){
       ignoredHits[nome] = (ignoredHits[nome]||0) + valor;
       return;
     }
@@ -544,7 +616,7 @@ function parseResumo(aoa){
     }
   }
   for(const nome in gpsFound){
-    if(ignoreList.includes(nome)){ ignoredHits[nome] = (ignoredHits[nome]||0) + gpsFound[nome]; continue; }
+    if(isIgnoredName(ignoreList, nome)){ ignoredHits[nome] = (ignoredHits[nome]||0) + gpsFound[nome]; continue; }
     if(!rawEvents[nome]) rawEvents[nome] = {total:0, origem:'especial'};
     rawEvents[nome].total += gpsFound[nome];
   }
@@ -569,13 +641,14 @@ function buildRows(rawEvents){
   const pendencias = [];
   for(const nome in rawEvents){
     const {total, origem} = rawEvents[nome];
-    const m = mapping[nome];
+    const mk = mapKeyFor(mapping, nome);
+    const m = mk ? mapping[mk] : null;
     if(m){
       let debito, credito;
       if(m.tipo === 'especial'){ debito = m.debito; credito = m.credito; }
       else if(m.tipo === 'provento'){ debito = m.conta; credito = CONTA_FIXA; }
       else { debito = CONTA_FIXA; credito = m.conta; }
-      finalRows.push({nome, debito, credito, valor: Math.round(total*100)/100});
+      finalRows.push({nome: nome.replace(/^"+|"+$/g,'').replace(/ä/g,'ã').replace(/Ä/g,'Ã').trim(), debito, credito, valor: Math.round(total*100)/100});
     } else {
       const sugestao = familySuggestion(nome);
       pendencias.push({nome, origem, valor: Math.round(total*100)/100, sugestao: sugestao ? sugestao.conta : null});
@@ -631,119 +704,39 @@ fileInput.addEventListener('change', (e)=>{
 dataLancamentoInput.addEventListener('change', renderPreviewOnly);
 
 /* =========================================================================
-   GESTÃO DE PERFIS DE EMPRESA
+   EMPRESA E CÓDIGO (a base de contas é única para todas)
    ========================================================================= */
-function renderProfileSelect(){
-  const sel = document.getElementById('profileSelect');
-  sel.innerHTML = '';
-  Object.keys(profiles).sort((a,b)=>a.localeCompare(b,'pt-BR')).forEach(name=>{
-    const opt = document.createElement('option');
-    opt.value = name;
-    opt.textContent = `${name} (código ${profiles[name].codigoEmpresa})`;
-    if(name === activeProfileName) opt.selected = true;
-    sel.appendChild(opt);
-  });
+function renderEmpresa(){
+  document.getElementById('empresaNome').textContent = nomeEmpresaAtual || '(envie o Resumo Folha para identificar)';
   document.getElementById('codigoEmpresaInput').value = codigoEmpresaAtual;
 }
 
 function handleCompanyDetection(companyName){
   const msgEl = document.getElementById('empresaMsg');
   if(!companyName){ return; }
-  const autoDetect = document.getElementById('autoDetectCheckbox').checked;
-  if(!autoDetect){
-    msgEl.textContent = `Empresa identificada no arquivo: "${companyName}" (detecção automática desativada — usando o perfil ativo "${activeProfileName}").`;
-    return;
-  }
-  if(profiles[companyName]){
-    if(activeProfileName !== companyName){
-      activeProfileName = companyName;
-      applyActiveProfile();
-      renderProfileSelect();
+  nomeEmpresaAtual = companyName;
+  let cod = codigoDaEmpresa(companyName);
+  if(cod === undefined){
+    const digitado = prompt(`Código empresa contábil para "${companyName}" (ex: 001, 099, 101).\nSerá lembrado nas próximas vezes:`, '');
+    if(digitado !== null && digitado.trim() !== ''){
+      cod = digitado.trim();
+      empresas[companyName] = cod;
+      saveEmpresas();
     }
-    msgEl.textContent = `Empresa detectada: "${companyName}" — perfil carregado (código empresa ${codigoEmpresaAtual}).`;
+  }
+  if(cod !== undefined){
+    codigoEmpresaAtual = cod;
+    msgEl.textContent = `Empresa identificada no arquivo — código empresa ${codigoParaPlanilha(cod)} na planilha.`;
   } else {
-    const criar = confirm(`Empresa "${companyName}" ainda não tem perfil cadastrado.\n\nCriar um novo perfil para ela agora?`);
-    if(!criar){
-      msgEl.textContent = `Atenção: "${companyName}" não corresponde ao perfil ativo ("${activeProfileName}"). Confira o código empresa e a base de eventos antes de gerar a planilha.`;
-      return;
-    }
-    const codigo = prompt(`Código empresa contábil para "${companyName}" (ex: 001, 101, 099):`, '');
-    if(codigo === null){ msgEl.textContent = `Perfil não criado para "${companyName}".`; return; }
-    const clonar = confirm('Começar esse perfil clonando a base de eventos/contas do perfil atual?\n\nOK = clonar\nCancelar = começar em branco');
-    profiles[companyName] = {
-      codigoEmpresa: codigo.trim(),
-      mapping: clonar ? JSON.parse(JSON.stringify(mapping)) : {},
-      ignoreList: clonar ? ignoreList.slice() : DEFAULT_IGNORE.slice()
-    };
-    saveProfiles();
-    activeProfileName = companyName;
-    applyActiveProfile();
-    renderProfileSelect();
-    renderBaseTable();
-    renderIgnoreList();
-    msgEl.textContent = `Novo perfil criado para "${companyName}" (código empresa ${codigoEmpresaAtual}).`;
+    msgEl.textContent = `Empresa "${companyName}" sem código cadastrado — informe o código abaixo antes de gerar a planilha.`;
   }
+  renderEmpresa();
 }
-
-document.getElementById('profileSelect').addEventListener('change', (e)=>{
-  activeProfileName = e.target.value;
-  applyActiveProfile();
-  renderProfileSelect();
-  renderBaseTable();
-  renderIgnoreList();
-  if(lastParse) renderAll();
-});
 
 document.getElementById('codigoEmpresaInput').addEventListener('change', (e)=>{
   codigoEmpresaAtual = e.target.value.trim();
-  saveCodigoEmpresa();
+  if(nomeEmpresaAtual){ empresas[nomeEmpresaAtual] = codigoEmpresaAtual; saveEmpresas(); }
   if(lastParse) renderPreviewOnly();
-});
-
-document.getElementById('btnNovaEmpresa').addEventListener('click', ()=>{
-  const nome = prompt('Nome da empresa (use exatamente o nome que aparece no Resumo Folha, para a detecção automática funcionar):');
-  if(!nome) return;
-  if(profiles[nome]){ alert('Já existe um perfil com esse nome.'); return; }
-  const codigo = prompt('Código empresa contábil (ex: 001, 101, 099):', '');
-  if(codigo === null) return;
-  const clonar = confirm('Começar esse perfil clonando a base de eventos/contas do perfil atual?\n\nOK = clonar\nCancelar = começar em branco');
-  profiles[nome] = {
-    codigoEmpresa: codigo.trim(),
-    mapping: clonar ? JSON.parse(JSON.stringify(mapping)) : {},
-    ignoreList: clonar ? ignoreList.slice() : DEFAULT_IGNORE.slice()
-  };
-  saveProfiles();
-  activeProfileName = nome;
-  applyActiveProfile();
-  renderProfileSelect();
-  renderBaseTable();
-  renderIgnoreList();
-  if(lastParse) renderAll();
-});
-
-document.getElementById('btnRenomearEmpresa').addEventListener('click', ()=>{
-  const novoNome = prompt('Novo nome para o perfil (deve bater com o nome que aparece no Resumo Folha):', activeProfileName);
-  if(!novoNome || novoNome === activeProfileName) return;
-  if(profiles[novoNome]){ alert('Já existe um perfil com esse nome.'); return; }
-  profiles[novoNome] = profiles[activeProfileName];
-  delete profiles[activeProfileName];
-  activeProfileName = novoNome;
-  saveProfiles();
-  saveActiveProfileName();
-  renderProfileSelect();
-});
-
-document.getElementById('btnExcluirEmpresa').addEventListener('click', ()=>{
-  if(Object.keys(profiles).length <= 1){ alert('Não é possível excluir o único perfil existente.'); return; }
-  if(!confirm(`Excluir o perfil "${activeProfileName}"? Isso apaga a base de eventos e a lista de ignorados desse perfil.`)) return;
-  delete profiles[activeProfileName];
-  saveProfiles();
-  activeProfileName = Object.keys(profiles)[0];
-  applyActiveProfile();
-  renderProfileSelect();
-  renderBaseTable();
-  renderIgnoreList();
-  if(lastParse) renderAll();
 });
 
 function renderAll(){
@@ -830,7 +823,7 @@ function renderPreviewOnly(){
   finalRows.forEach(row=>{
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${codigoEmpresaAtual}</td>
+      <td>${codigoParaPlanilha(codigoEmpresaAtual)}</td>
       <td>${dataStr}</td>
       <td>${row.debito}</td>
       <td>${row.credito}</td>
@@ -858,7 +851,7 @@ document.getElementById('btnDownload').addEventListener('click', async ()=>{
   }
   const dataObj = new Date(dataLancamentoInput.value+'T00:00:00');
   const header = ["CÓDIGO EMPRESA*","DATA LANÇAMENTO*","CONTA DEBITO","CONTA CREDITO","CÓDIGO HISTÓRICO PADRÃO","COMPLEMENTO","VALOR LANÇAMENTO*","CENTRO CUSTO DEBITO","CENTRO CUSTO CREDITO","CÓDIGO AGRUPADOR"];
-  const rows = finalRows.map(r=>[codigoEmpresaAtual, dataObj, r.debito, r.credito, CODIGO_HISTORICO, r.nome, r.valor, null, null, null]);
+  const rows = finalRows.map(r=>[codigoParaPlanilha(codigoEmpresaAtual), dataObj, r.debito, r.credito, CODIGO_HISTORICO, r.nome, r.valor, null, null, null]);
   const aoa = [header, ...rows];
   const ws = XLSX.utils.aoa_to_sheet(aoa, {cellDates:true});
   const wb = XLSX.utils.book_new();
@@ -968,7 +961,7 @@ document.getElementById('btnAddEvent').addEventListener('click', ()=>{
 });
 
 document.getElementById('btnExportMapping').addEventListener('click', async ()=>{
-  const blob = new Blob([JSON.stringify({mapping, ignoreList}, null, 2)], {type:'application/json'});
+  const blob = new Blob([JSON.stringify({mapping, ignoreList, empresas}, null, 2)], {type:'application/json'});
   await salvarArquivo('base_eventos_folha.json', blob);
 });
 document.getElementById('btnImportMapping').addEventListener('click', ()=>{
@@ -983,6 +976,7 @@ document.getElementById('importMappingFile').addEventListener('change', (e)=>{
       const obj = JSON.parse(ev.target.result);
       if(obj.mapping){ mapping = obj.mapping; saveMapping(); }
       if(obj.ignoreList){ ignoreList = obj.ignoreList; saveIgnore(); }
+      if(obj.empresas){ empresas = Object.assign({}, empresas, obj.empresas); saveEmpresas(); }
       renderBaseTable(); renderIgnoreList();
       if(lastParse) renderAll();
     }catch(err){ alert('JSON inválido: '+err.message); }
@@ -991,16 +985,16 @@ document.getElementById('importMappingFile').addEventListener('change', (e)=>{
 });
 document.getElementById('btnResetMapping').addEventListener('click', ()=>{
   if(!confirm('Restaurar a base padrão? Isso apaga eventos e contas adicionados/editados manualmente.')) return;
-  mapping = JSON.parse(JSON.stringify(DEFAULT_MAPPING));
-  ignoreList = DEFAULT_IGNORE.slice();
+  mapping = baseCompleta();
+  ignoreList = DEFAULT_IGNORE.concat(IGNORE_EXTRA);
   saveMapping(); saveIgnore();
   renderBaseTable(); renderIgnoreList();
   if(lastParse) renderAll();
 });
 
-// inicialização: carrega perfis de empresa e renderiza tudo mesmo antes de enviar arquivo
-loadProfiles();
-renderProfileSelect();
+// inicialização: carrega a base única e renderiza tudo mesmo antes de enviar arquivo
+loadBase();
+renderEmpresa();
 renderIgnoreList();
 renderBaseTable();
 </script>
