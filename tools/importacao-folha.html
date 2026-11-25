@@ -311,6 +311,7 @@ async function salvarArquivo(filename, blob){
    ========================================================================= */
 const CONTA_FIXA = "2.1.1.01.0001";
 const CODIGO_HISTORICO = 182;
+const CONTA_PASSIVO_PROLABORE = "2.1.1.01.0011";
 const DEFAULT_PROFILE_NAME = "BEIJA FLOR COMERCIO DE TINTAS LTDA";
 
 const DEFAULT_MAPPING = {"13o Salário Adiantado":{"tipo":"especial","debito":"1.1.3.01.0006","credito":"2.1.1.01.0006"},"Média H.Extras 13o Adto":{"tipo":"especial","debito":"1.1.3.01.0006","credito":"2.1.1.01.0006"},"Média Variáveis 13o Adto":{"tipo":"especial","debito":"1.1.3.01.0006","credito":"2.1.1.01.0006"},"Insalubridade 13o Adto.":{"tipo":"especial","debito":"1.1.3.01.0006","credito":"2.1.1.01.0006"},"Periculosidade 13o Adto.":{"tipo":"especial","debito":"1.1.3.01.0006","credito":"2.1.1.01.0006"},"Adic.Noturno 13o Adto.":{"tipo":"especial","debito":"1.1.3.01.0006","credito":"2.1.1.01.0006"},"13o Sal Adto Premio Mensa":{"tipo":"especial","debito":"1.1.3.01.0006","credito":"2.1.1.01.0006"},"13o Sal Adto Ajuda Custo":{"tipo":"especial","debito":"1.1.3.01.0006","credito":"2.1.1.01.0006"},"Pensão Judic. s/ 13o Adto":{"tipo":"especial","debito":"2.1.1.01.0006","credito":"2.1.1.01.0009"},"Prov.Desc.Inss 13o Adto":{"tipo":"especial","debito":"2.1.1.01.0006","credito":"2.1.5.01.0002"},"Prov.Desc.IRRF 13o Adto":{"tipo":"especial","debito":"2.1.1.01.0006","credito":"2.1.1.01.0010"},"Horas Normais":{"tipo":"provento","conta":"3.1.3.01.0001"},"Horas Férias Diurnas":{"tipo":"provento","conta":"2.1.5.01.0004"},"DSR s/Comissao":{"tipo":"provento","conta":"3.1.3.01.0001"},"Horas Extras c/ 100%":{"tipo":"provento","conta":"3.1.3.01.0003"},"Horas Extras c/ 90%":{"tipo":"provento","conta":"3.1.3.01.0003"},"Horas Extras c/ 75%":{"tipo":"provento","conta":"3.1.3.01.0003"},"Horas Extras c/90% Comis.":{"tipo":"provento","conta":"3.1.3.01.0003"},"DSR H.E Sobre Comissao":{"tipo":"provento","conta":"3.1.3.01.0001"},"Horas Extras 80% Comissão":{"tipo":"provento","conta":"3.1.3.01.0003"},"Horas Extras c/100% Comis":{"tipo":"provento","conta":"3.1.3.01.0003"},"Hs Atestado 15 Prim.Dias":{"tipo":"provento","conta":"3.1.3.01.0001"},"Adicional Noturno 20%":{"tipo":"provento","conta":"3.1.3.01.0001"},"Insalubridade":{"tipo":"provento","conta":"3.1.3.01.0001"},"Periculosidade":{"tipo":"provento","conta":"3.1.3.01.0001"},"DSR Reflexo H.Extras":{"tipo":"provento","conta":"3.1.3.01.0003"},"Insalubridade Férias":{"tipo":"provento","conta":"2.1.5.01.0004"},"Adic.Noturno Férias":{"tipo":"provento","conta":"2.1.5.01.0004"},"Premio Meta Mensal":{"tipo":"provento","conta":"3.1.3.01.0001"},"Aviso Prévio Indenizado":{"tipo":"provento","conta":"3.1.3.01.0002"},"Média Horas Extras A.P.I":{"tipo":"provento","conta":"3.1.3.01.0002"},"Média Val.Variáveis A.P.I":{"tipo":"provento","conta":"3.1.3.01.0002"},"Saldo de Salário":{"tipo":"provento","conta":"3.1.3.01.0001"},"Média Horas Extras Férias":{"tipo":"provento","conta":"2.1.5.01.0004"},"Média Variáveis Férias":{"tipo":"provento","conta":"2.1.5.01.0004"},"1/3 Férias":{"tipo":"provento","conta":"2.1.5.01.0004"},"Diferença de Férias":{"tipo":"provento","conta":"3.1.3.01.0022"},"Multa Dobro Férias":{"tipo":"provento","conta":"3.1.3.01.0022"},"Abono Pecuniário Férias":{"tipo":"provento","conta":"2.1.5.01.0004"},"Média H.Extras Abono Pec.":{"tipo":"provento","conta":"2.1.5.01.0004"},"Média V.Variáv.Abono Pec.":{"tipo":"provento","conta":"2.1.5.01.0004"},"1/3 Abono Pecuniário Fér":{"tipo":"provento","conta":"2.1.5.01.0004"},"Diferença de Abono":{"tipo":"provento","conta":"2.1.5.01.0004"},"Multa Dobro Abono Pec.":{"tipo":"provento","conta":"3.1.3.01.0022"},"Férias Vencidas Rescisão":{"tipo":"provento","conta":"2.1.5.01.0004"},"Férias Proporc.Rescisão":{"tipo":"provento","conta":"2.1.5.01.0004"},"Média H.Extra Férias Resc":{"tipo":"provento","conta":"2.1.5.01.0004"},"Média V.Variáv.Férias Res":{"tipo":"provento","conta":"2.1.5.01.0004"},"Insalubridade Férias Resc":{"tipo":"provento","conta":"2.1.5.01.0004"},"1/3 Férias Rescisão":{"tipo":"provento","conta":"2.1.5.01.0004"},"Multa Dobro Férias Resc.":{"tipo":"provento","conta":"2.1.5.01.0004"},"13o Salário Proporc.Resc":{"tipo":"provento","conta":"2.1.5.01.0001"},"Média H.Extras 13o Prop.":{"tipo":"provento","conta":"2.1.5.01.0001"},"Média Variáveis 13o Prop.":{"tipo":"provento","conta":"2.1.5.01.0001"},"Insalubridade 13o Proporc":{"tipo":"provento","conta":"3.1.3.01.0019"},"13o Indenizado Rescisão":{"tipo":"provento","conta":"2.1.5.01.0001"},"Média H.Extras 13o Inden":{"tipo":"provento","conta":"2.1.5.01.0001"},"Média Variáveis 13o Ind.":{"tipo":"provento","conta":"2.1.5.01.0001"},"Comissao Minima Garantida":{"tipo":"provento","conta":"3.1.3.01.0001"},"Comissões":{"tipo":"provento","conta":"3.1.3.01.0001"},"Devolução Desc.Indevido":{"tipo":"provento","conta":"3.1.3.01.0001"},"Ajuda Custo (SI) Ferias":{"tipo":"provento","conta":"3.1.3.01.0018"},"Premiação CCT":{"tipo":"provento","conta":"3.1.3.01.0001"},"Ajuda de Custo (SI)":{"tipo":"provento","conta":"3.1.3.01.0018"},"Horas Extras c/ 80%":{"tipo":"provento","conta":"3.1.3.01.0003"},"Premio (SI)":{"tipo":"provento","conta":"3.1.3.01.0004"},"Quebra de Caixa":{"tipo":"provento","conta":"3.1.3.01.0001"},"H.E Interjornada 50%":{"tipo":"provento","conta":"3.1.3.01.0003"},"H E Interjornada 50% Comi":{"tipo":"provento","conta":"3.1.3.01.0003"},"Horas Extras 75% Comiss":{"tipo":"provento","conta":"3.1.3.01.0003"},"DSR H.E s/Comissao":{"tipo":"provento","conta":"3.1.3.01.0003"},"Comissão Mensal":{"tipo":"provento","conta":"3.1.3.01.0001"},"DSR Adicional Noturno":{"tipo":"provento","conta":"3.1.3.01.0001"},"Premio Mensal(SI)":{"tipo":"provento","conta":"3.1.3.01.0004"},"Premio Mensal I (SI)":{"tipo":"provento","conta":"3.1.3.01.0004"},"Horas Extras c/90% Comis":{"tipo":"provento","conta":"3.1.3.01.0003"},"H.E.Interjorna 50% Comis.":{"tipo":"provento","conta":"3.1.3.01.0003"},"H.E.Interjorna 90% Comis.":{"tipo":"provento","conta":"3.1.3.01.0003"},"Diaria de Viagem":{"tipo":"provento","conta":"3.1.3.01.0001"},"Insal. Sobre Hs Atestado":{"tipo":"provento","conta":"3.1.3.01.0001"},"Estouro do Mês":{"tipo":"provento","conta":"3.1.3.01.0001"},"Salário Família":{"tipo":"provento","conta":"2.1.1.01.0007"},"Troco Férias":{"tipo":"provento","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 1/2":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 9/10":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 7/10":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 4/10":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 3/4":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 1/10":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 5/6":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 3/3":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 7/8":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 4/5":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 4/4":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 1/6":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc.Vale Parcelado 10/10":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 4/8":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Aviso Prévio Reavido":{"tipo":"desconto","conta":"3.1.3.01.0002"},"Média Horas Extras A.P.R":{"tipo":"desconto","conta":"3.1.3.01.0002"},"Insalubridade A.P.R":{"tipo":"desconto","conta":"3.1.3.01.0002"},"Troco Mês Anterior":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Estouro Mês Anterior":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Líquido Rescisão":{"tipo":"desconto","conta":"2.1.1.01.0005"},"Pensão Judicial":{"tipo":"desconto","conta":"2.1.1.01.0009"},"Pensão Judicial Férias":{"tipo":"desconto","conta":"2.1.1.01.0009"},"Desconto Adto Férias":{"tipo":"desconto","conta":"1.1.3.01.0001"},"Mensalidade Sindical":{"tipo":"desconto","conta":"2.1.1.01.0013"},"Desconto de Adiantamentos":{"tipo":"desconto","conta":"1.1.3.01.0002"},"Vale Transporte":{"tipo":"desconto","conta":"3.1.3.01.0011"},"INSS Férias":{"tipo":"desconto","conta":"2.1.1.01.0007"},"INSS":{"tipo":"desconto","conta":"2.1.1.01.0007"},"INSS 13o Salário":{"tipo":"desconto","conta":"2.1.1.01.0007"},"IRRF":{"tipo":"desconto","conta":"2.1.1.01.0010"},"IRRF Férias":{"tipo":"desconto","conta":"2.1.1.01.0010"},"Desc.Vale Parcelado 3/15":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desconto de Vales":{"tipo":"desconto","conta":"1.1.3.01.0002"},"Vale Parcelado":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desconto Unimed Titular":{"tipo":"desconto","conta":"3.1.3.01.0012"},"Desconto Unimed Depend.":{"tipo":"desconto","conta":"3.1.3.01.0012"},"Consulta Unimed":{"tipo":"desconto","conta":"3.1.3.01.0012"},"Desconto Notif.Judicial":{"tipo":"desconto","conta":"2.1.1.01.0015"},"Desconto Notif.Jud.Ferias":{"tipo":"desconto","conta":"2.1.1.01.0015"},"Desc. Vale Parcelado 5/5":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc. Vale Parcelado 5/10":{"tipo":"desconto","conta":"3.1.3.01.0011"},"Desc. Vale Parcelado 5/8":{"tipo":"desconto","conta":"3.1.3.01.0011"},"Desc. Vale Parcelado 3/8":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc.Vale Parcelado 10/12":{"tipo":"desconto","conta":"3.1.3.01.0001"},"Desc eConsignado CLT":{"tipo":"desconto","conta":"2.1.1.01.0008"},"Desc eConsignado 2 CLT":{"tipo":"desconto","conta":"2.1.1.01.0008"},"Desc eConsignado 3 CLT":{"tipo":"desconto","conta":"2.1.1.01.0008"},"Desc eConsignado 4 CLT":{"tipo":"desconto","conta":"2.1.1.01.0008"},"Desc eConsignado 5 CLT":{"tipo":"desconto","conta":"2.1.1.01.0008"},"Desc eConsignado 6 CLT":{"tipo":"desconto","conta":"2.1.1.01.0008"},"Desc eConsignado 7 CLT":{"tipo":"desconto","conta":"2.1.1.01.0008"},"FGTS":{"tipo":"especial","debito":"3.1.3.01.0008","credito":"2.1.1.01.0008"},"FGTS 13o Sal.Depósito":{"tipo":"especial","debito":"2.1.5.01.0003","credito":"2.1.1.01.0008"},"FGTS 13o Salário":{"tipo":"especial","debito":"2.1.5.01.0003","credito":"2.1.1.01.0008"},"FGTS Rescisão Depositado":{"tipo":"especial","debito":"3.1.3.01.0008","credito":"2.1.1.01.0008"},"FGTS 40% Depositado":{"tipo":"especial","debito":"3.1.3.01.0008","credito":"2.1.1.01.0008"},"FGTS 13º Ind Dep":{"tipo":"especial","debito":"3.1.3.01.0008","credito":"2.1.1.01.0008"},"INSS Parte Empresa":{"tipo":"especial","debito":"3.1.3.01.0007","credito":"2.1.1.01.0007"},"INSS Terceiros":{"tipo":"especial","debito":"3.1.3.01.0007","credito":"2.1.1.01.0007"},"INSS Acid. Trabalho":{"tipo":"especial","debito":"3.1.3.01.0007","credito":"2.1.1.01.0007"}};
@@ -331,7 +332,7 @@ const BASE_EXTRA = {
       "Pró-Labore":                  {"tipo":"especial","debito":"3.1.3.01.0031","credito":"2.1.1.01.0011"},
       "INSS Individual Pro-Labor":   {"tipo":"especial","debito":"2.1.1.01.0011","credito":"2.1.1.01.0007"},
       // INSS sobre 13º (igual a "INSS 13o Salário")
-      "INSS s/ 13º Salário":         {"tipo":"desconto","conta":"2.1.1.01.0007"},
+      "INSS s/ 13º Salário":         {"tipo":"desconto","conta":"2.1.5.01.0002"},
       // rescisão
       "Ind.Térm.Contr.Antec.Empr":   {"tipo":"provento","conta":"3.1.3.01.0002"},
       "FGTS A.P.I. Dep":             {"tipo":"especial","debito":"3.1.3.01.0008","credito":"2.1.1.01.0008"},
@@ -340,8 +341,8 @@ const BASE_EXTRA = {
       // contribuição assistencial (igual a "Mensalidade Sindical")
       "Contrib.Assistencial":        {"tipo":"desconto","conta":"2.1.1.01.0013"},
       // provisão de consignado do adiantamento: desconto e estorno de mesmo valor (efeito líquido zero)
-      "Desc Prov eConsig Adto":      {"tipo":"desconto","conta":"2.1.1.01.0008"},
-      "Estorno Prov eConsig Adto":   {"tipo":"provento","conta":"2.1.1.01.0008"},
+      "Desc Prov eConsig Adto":      {"tipo":"desconto","conta":"3.1.3.01.0008"},
+      "Estorno Prov eConsig Adto":   {"tipo":"provento","conta":"3.1.3.01.0008"},
       // trocos
       "Troco Mes":                   {"tipo":"provento","conta":"3.1.3.01.0001"},
       "Troco Mes Socio":             {"tipo":"provento","conta":"3.1.3.01.0001"},
@@ -352,6 +353,10 @@ const BASE_EXTRA = {
 const IGNORE_EXTRA = ["Horas Faltas(Demonstrat.)"];
 // Correções que SOBRESCREVEM o que estiver salvo no navegador (aplicadas uma única vez por versão).
 // Depois de aplicadas, qualquer ajuste manual feito na tabela volta a valer normalmente.
+const BASE_CORRECAO_V3_KEY = 'folhaImport_correcao_fgts13_v3';
+const BASE_CORRECAO_V3 = {
+  "FGTS 13º Salário": {"tipo":"especial","debito":"2.1.5.01.0003","credito":"2.1.1.01.0008"}
+};
 const BASE_CORRECAO_V2_KEY = 'folhaImport_correcao_prolabore_v2';
 const BASE_CORRECAO_V2 = {
   "Pró-Labore":                {"tipo":"especial","debito":"3.1.3.01.0031","credito":"2.1.1.01.0011"},
@@ -480,6 +485,16 @@ function loadBase(){
       localStorage.setItem(BASE_CORRECAO_V2_KEY, '1');
     }
   }catch(e){}
+  try{
+    if(!localStorage.getItem(BASE_CORRECAO_V3_KEY)){
+      Object.keys(BASE_CORRECAO_V3).forEach(function(ev){
+        const k = normEvt(ev);
+        Object.keys(mapping).forEach(function(n){ if(normEvt(n) === k) delete mapping[n]; });
+        mapping[ev] = JSON.parse(JSON.stringify(BASE_CORRECAO_V3[ev]));
+      });
+      localStorage.setItem(BASE_CORRECAO_V3_KEY, '1');
+    }
+  }catch(e){}
   empresas = Object.assign({}, EMPRESAS_PADRAO, empSalvas);
   saveBase(); saveEmpresas();
 }
@@ -532,6 +547,7 @@ function parseResumo(aoa){
   let ativo = false; // estamos entre o cabeçalho "Cod." e a linha "Totais" da tabela de eventos
   let periodEnd = null;
   let empresaSectionIdx = -1;
+  let liquidoFolha = null; // 'Líquido:' do quadro Totais do Resumo
   let companyName = null;
 
   // 1ª passada: localizar o índice da seção "Resumo dos Valores Totais da Empresa"
@@ -578,6 +594,7 @@ function parseResumo(aoa){
 
     if(c0 === 'Totais' || c0 === 'Colaboradores' || c0 === 'Situação'){ ativo = false; continue; }
 
+    if(c0 === 'Líquido:' && liquidoFolha === null){ const lv = brToFloat(cell(r,1)); if(lv !== null) liquidoFolha = lv; continue; }
     if(!ativo) continue;
 
     // coluna da esquerda: sempre provento (inclui a faixa "Vantagem")
@@ -621,7 +638,7 @@ function parseResumo(aoa){
     rawEvents[nome].total += gpsFound[nome];
   }
 
-  return {rawEvents, ignoredHits, periodEnd, companyName};
+  return {rawEvents, ignoredHits, periodEnd, companyName, liquidoFolha};
 }
 
 function lastDayISO(d){
@@ -840,6 +857,26 @@ function renderPreviewOnly(){
   document.getElementById('statReconhecidos').textContent = finalRows.length;
   document.getElementById('statIgnorados').textContent = Object.keys(lastParse.ignoredHits||{}).length;
   document.getElementById('checkSoma').textContent = `Linhas: ${finalRows.length} · Soma dos lançamentos: R$ ${fmtMoney(totalDeb)}`;
+  // Conferência com o líquido da folha: o que entra em Salários a Pagar (créditos - débitos)
+  // + o que fica no passivo do pró-labore tem que dar o "Líquido" do Resumo.
+  let box = document.getElementById('checkLiquido');
+  if(!box){ box = document.createElement('div'); box.id = 'checkLiquido'; box.className = 'footline'; document.getElementById('checkSoma').after(box); }
+  if(lastParse && lastParse.liquidoFolha !== null && lastParse.liquidoFolha !== undefined){
+    let sal = 0, pro = 0;
+    finalRows.forEach(r=>{
+      if(r.credito === CONTA_FIXA) sal += r.valor;
+      if(r.debito === CONTA_FIXA) sal -= r.valor;
+      if(r.credito === CONTA_PASSIVO_PROLABORE) pro += r.valor;
+      if(r.debito === CONTA_PASSIVO_PROLABORE) pro -= r.valor;
+    });
+    sal = Math.round(sal*100)/100; pro = Math.round(pro*100)/100;
+    const dif = Math.round((lastParse.liquidoFolha - sal - pro)*100)/100;
+    const pend = buildRows(currentRawEventsResolved()).pendencias.length;
+    box.innerHTML = `Conferência com o líquido do Resumo (R$ ${fmtMoney(lastParse.liquidoFolha)}): ${CONTA_FIXA} = ${fmtMoney(sal)} · pró-labore (${CONTA_PASSIVO_PROLABORE}) = ${fmtMoney(pro)} · ` +
+      (Math.abs(dif) < 0.005 ? '<strong>✓ fecha</strong>' : `<strong style="color:#c0392b;">⚠ diferença de R$ ${fmtMoney(dif)}</strong>${pend ? ' (há pendências não contabilizadas)' : ' — confira os eventos e as contas'}`);
+  } else {
+    box.textContent = '';
+  }
 }
 
 document.getElementById('btnDownload').addEventListener('click', async ()=>{

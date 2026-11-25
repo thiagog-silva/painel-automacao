@@ -9,8 +9,13 @@
 <meta name="hub-categoria" content="Folha de Pagamento">
 <title>Extrair Desconto Adto Férias / Rescisão — Folha</title>
 <!--
-  VERSÃO: 1.3.0 — finalizada e congelada em 2026-09-24.
+  VERSÃO: 1.4.0 — 2026-11-25.
   Alterações desta versão:
+  - 1.4.0: os resumos pra copiar (Etapa 2 e Etapa 3, Férias e Rescisão) saem
+    sempre em ordem alfabética. Na Etapa 3 o pareamento passou a ser só por
+    NOME (o valor pode ser diferente; não casa mais por valor igual com nome
+    diferente), os pares ficam juntos em ordem alfabética e o que não tem par
+    (provisão sem pagamento / pagamento sem provisão) vai pro final.
   - 1.1.0: correção na detecção de "Líquido Rescisão" no PDF (alguns
     relatórios exportam esse evento com "ã" trocado por "ä" por falha de
     fonte incorporada no PDF; a busca agora aceita as duas grafias).
@@ -568,7 +573,9 @@ async function handleFile(file){
       }
     }
 
-    resultados = matches.map(m => ({ ...m, nomeTruncado: truncarNome(m.nomeCompleto) }));
+    resultados = matches
+      .map(m => ({ ...m, nomeTruncado: truncarNome(m.nomeCompleto) }))
+      .sort((a, b) => compararNomes(a.nomeCompleto, b.nomeCompleto) || (parseNumeroBR(a.valor) - parseNumeroBR(b.valor)));
 
     // preencher campos de data/mês com o que foi encontrado
     if (periodoFim){
@@ -723,6 +730,34 @@ function normalizarNome(nome){
     .toUpperCase()
     .split(/\s+/)
     .filter(w => w && !CONECTORES.has(w));
+}
+
+// chave de ordenação alfabética: sem acento, maiúsculo, espaços normalizados
+function chaveNome(nome){
+  return (nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+}
+function compararNomes(a, b){
+  return chaveNome(a).localeCompare(chaveNome(b), 'pt-BR');
+}
+
+// força do casamento entre dois nomes (0 = não combinam). Só usa o NOME:
+// 1000 = mesmas palavras; 100 = um nome contido no outro (nome truncado no razão);
+// depois, quantidade de palavras em comum. Mínimo pra combinar: primeiro nome
+// igual ou algum sobrenome (3+ letras) em comum, como antes.
+function forcaNome(nomeA, nomeB){
+  const a = normalizarNome(nomeA);
+  const b = normalizarNome(nomeB);
+  if (!a.length || !b.length) return 0;
+  const setA = new Set(a), setB = new Set(b);
+  const comuns = [...setA].filter(w => setB.has(w));
+  const minimo = a[0] === b[0] || comuns.some(w => w.length > 2);
+  if (!minimo) return 0;
+  let f = comuns.length;
+  if (setA.size === setB.size && comuns.length === setA.size) f += 1000;
+  else if (comuns.length === Math.min(setA.size, setB.size)) f += 100;
+  if (a[0] === b[0]) f += 5;
+  if (a[a.length - 1] === b[b.length - 1]) f += 5;
+  return f;
 }
 
 function nomesCombinam(nomeA, nomeB){
@@ -887,16 +922,20 @@ function processarConta(conta){
   const st = RAZAO_STATE[conta];
   const pagamentos = (st ? st.linhasPagto : []).map((p, i) => ({ tipo: 'pagamento', id: `g${i}`, nome: p.nome, data: p.data, historico: p.historico, valorPago: p.valor, usado: false }));
 
-  provisoes.forEach(prov => {
-    const candidatos = pagamentos.filter(p => !p.usado);
-    let par = candidatos.find(p => nomesCombinam(prov.nome, p.nome));
-    if (!par){
-      par = candidatos.find(p => Math.abs(p.valorPago - prov.valorProvisao) < 0.005);
-    }
-    if (par){
-      par.usado = true;
-      prov.par = par;
-    }
+  // pareamento só por NOME (o valor pode ser diferente). Pega primeiro os pares
+  // mais fortes (nome igual), depois os parciais, sem repetir ninguém.
+  const candidatosPar = [];
+  provisoes.forEach((prov, i) => {
+    pagamentos.forEach((pag, j) => {
+      const f = forcaNome(prov.nome, pag.nome);
+      if (f > 0) candidatosPar.push({ prov, pag, f, i, j });
+    });
+  });
+  candidatosPar.sort((x, y) => (y.f - x.f) || (x.i - y.i) || (x.j - y.j));
+  candidatosPar.forEach(c => {
+    if (c.prov.par || c.pag.usado) return;
+    c.pag.usado = true;
+    c.prov.par = c.pag;
   });
 
   const linhas = [];
@@ -924,6 +963,8 @@ function processarConta(conta){
       origem: 'pagamento',
     });
   });
+  // ordem: primeiro os pares (A–Z pelo nome), depois o que não tem par (A–Z)
+  linhas.sort((x, y) => (Number(!x.pareado) - Number(!y.pareado)) || compararNomes(x.nome, y.nome) || (x.origem === y.origem ? 0 : (x.origem === 'provisao' ? -1 : 1)));
   linhas.forEach((l, idx) => l.idx = idx);
 
   RAZAO_COMPARATIVO[conta] = linhas;
@@ -1002,9 +1043,12 @@ function buildLinesForConta(conta){
   const linhasSel = (RAZAO_COMPARATIVO[conta] || []).filter(l => checkedIdx.has(l.idx));
 
   const linhas = [];
+  let separou = false;
   linhasSel.forEach(l => {
-    if (!l.pareado && linhas.length && linhas[linhas.length - 1] !== ''){
-      linhas.push('');
+    // uma linha em branco separa o bloco dos pares do bloco sem par (no final)
+    if (!l.pareado && !separou){
+      separou = true;
+      if (linhas.length) linhas.push('');
     }
     if (l.pareado){
       // par completo: uma linha positiva com o pagamento (vindo do razão) e
@@ -1017,18 +1061,8 @@ function buildLinesForConta(conta){
     } else {
       linhas.push(`${l.data}\t${l.historico} (SEM PROVISÃO NO PDF)\t${formatarValorBR(l.valorPago)}`);
     }
-    if (!l.pareado){
-      linhas.push('');
-    }
   });
-
-  const limpo = [];
-  linhas.forEach(l => {
-    if (l === '' && limpo.length && limpo[limpo.length - 1] === '') return;
-    limpo.push(l);
-  });
-  while (limpo.length && limpo[limpo.length - 1] === '') limpo.pop();
-  return limpo;
+  return linhas;
 }
 
 function updateRazaoPreview(conta){
