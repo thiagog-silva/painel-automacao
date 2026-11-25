@@ -266,7 +266,10 @@ input[type="checkbox"]{ width:16px; height:16px; accent-color:var(--accent); }
 
     <fieldset>
       <legend>Contas e parâmetros</legend>
-      <div class="field-row" style="margin-top:0">
+      <div class="field-row" id="boxCnpj" hidden style="margin-top:0">
+        <div class="field" style="max-width:640px"><label for="selCnpj">Empresa das guias (há guias de mais de um CNPJ carregadas)</label><select id="selCnpj"></select></div>
+      </div>
+      <div class="field-row">
         <div class="field"><label for="cFgts">FGTS a recolher</label><input type="text" id="cFgts" class="mono"></div>
         <div class="field"><label for="cDespesa">Despesa de FGTS</label><input type="text" id="cDespesa" class="mono"></div>
         <div class="field"><label for="cProv13">Provisão FGTS 13º</label><input type="text" id="cProv13" class="mono"></div>
@@ -757,21 +760,42 @@ async function pdfParaLinhas(buf){
 }
 
 /* ===================== ESTADO ===================== */
-const LS = { guias:'conciliacaoFgts_guias_v1', nomes:'conciliacaoFgts_nomes_v1', contas:'conciliacaoFgts_contas_v1', lista:'conciliacaoFgts_lista_v1' };
+const LS = { guias:'conciliacaoFgts_guias_v1', nomes:'conciliacaoFgts_nomes_v1', contas:'conciliacaoFgts_contas_v1', lista:'conciliacaoFgts_lista_v1', contasEmp:'conciliacaoFgts_contasemp_v1', cnpj:'conciliacaoFgts_cnpj_v1' };
 const lsGet = (k, def) => { try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; }catch(_){ return def; } };
 const lsSet = (k, v) => { try{ localStorage.setItem(k, JSON.stringify(v)); }catch(_){} };
 
+function contasDaEmpresa(cod){
+  const salvo = lsGet(LS.contasEmp, {});
+  const c = Object.assign({}, CONTAS_PADRAO, salvo[cod || '_'] || (cod ? {} : lsGet(LS.contas, {})));
+  Object.keys(CONTAS_PADRAO).forEach(k => { if (!c[k]) c[k] = CONTAS_PADRAO[k]; });
+  return c;
+}
 const E = {
   guias: new Map(),
   razao: null, razaoNome: '',
   nomesEdit: lsGet(LS.nomes, {}),
   listaNomes: lsGet(LS.lista, []),
-  contas: (function(){ const c = Object.assign({}, CONTAS_PADRAO, lsGet(LS.contas, {})); if (!c.juros) c.juros = CONTAS_PADRAO.juros; return c; })(),
+  contas: contasDaEmpresa(''),
+  cnpj: lsGet(LS.cnpj, ''),
   ajEdit: {},
   empresa: '', dataUnica: '', filtroMes: ''
 };
 lsGet(LS.guias, []).forEach(g => E.guias.set(g.id, g));
 let M = null;
+const raizCnpj = g => (g.cnpj || '').trim();
+function guiasAtivas(){
+  const cont = new Map();
+  E.guias.forEach(g => cont.set(raizCnpj(g), (cont.get(raizCnpj(g)) || 0) + 1));
+  if (!cont.has(E.cnpj)) E.cnpj = [...cont.entries()].sort((a, b) => b[1] - a[1]).map(e => e[0])[0] || '';
+  const box = $('boxCnpj');
+  if (cont.size > 1){
+    const nomes = new Map(); E.guias.forEach(g => { if (!nomes.has(raizCnpj(g))) nomes.set(raizCnpj(g), g.empresa || ''); });
+    $('selCnpj').innerHTML = [...cont.keys()].map(c => '<option value="' + esc(c) + '">' + esc((c || '(sem CNPJ)') + ' — ' + (nomes.get(c) || '') + ' (' + cont.get(c) + ' guias)') + '</option>').join('');
+    $('selCnpj').value = E.cnpj; box.hidden = false;
+  } else box.hidden = true;
+  const out = new Map(); E.guias.forEach((g, id) => { if (raizCnpj(g) === E.cnpj) out.set(id, g); });
+  return out;
+}
 
 const $ = id => document.getElementById(id);
 function toast(msg, tipo){
@@ -805,6 +829,7 @@ async function tratarArquivos(lista){
         E.razao = parseRazao(decodificarBuffer(await f.arrayBuffer()));
         E.razaoNome = f.name;
         if (E.razao.empresa) $('empresa').value = E.razao.empresa;
+        E.contas = contasDaEmpresa(E.razao.empresa); preencherContas();
         if (E.razao.conta && E.razao.conta !== E.contas.fgts) toast('O razão é da conta ' + E.razao.conta + ' (a ferramenta espera ' + E.contas.fgts + '). Confira o campo "FGTS a recolher".', 'err');
       } else toast('"' + f.name + '": formato não reconhecido (use PDF das guias e CSV do razão).', 'err');
     }catch(err){ toast('"' + f.name + '": ' + (err && err.message ? err.message : err), 'err'); }
@@ -817,20 +842,22 @@ async function tratarArquivos(lista){
 function renderArquivos(){
   const box = $('chips'); box.innerHTML = '';
   const chip = (txt, onrm) => { const s = document.createElement('span'); s.className = 'file-chip'; s.innerHTML = esc(txt) + (onrm ? ' <span class="rm" title="remover">✕</span>' : ''); if (onrm) s.querySelector('.rm').onclick = onrm; box.appendChild(s); };
-  if (E.guias.size) chip(E.guias.size + ' guia(s) do FGTS Digital carregada(s)', () => { if (confirm('Remover todas as guias carregadas?')){ E.guias.clear(); lsSet(LS.guias, []); recalcular(); } });
+  const nAtivas = [...E.guias.values()].filter(g => raizCnpj(g) === E.cnpj).length;
+  if (E.guias.size) chip((nAtivas === E.guias.size ? E.guias.size : nAtivas + ' de ' + E.guias.size) + ' guia(s) do FGTS Digital carregada(s)', () => { if (confirm('Remover todas as guias carregadas?')){ E.guias.clear(); lsSet(LS.guias, []); recalcular(); } });
   if (E.razao) chip('Razão: ' + E.razaoNome + ' · conta ' + E.razao.conta + ' · até ' + fmtDMY(E.razao.periodoFim), () => { E.razao = null; E.razaoNome = ''; recalcular(); });
 }
 
 /* ===================== CÁLCULO + TELAS ===================== */
 const CAT = { mensal:'FGTS mensal / 13º', resc:'Rescisório + multa 40%', cons:'Consignado', enc:'Juros/multa' };
 function recalcular(){
+  const GA = guiasAtivas();
   renderArquivos();
-  const pronto = E.razao && E.guias.size;
+  const pronto = E.razao && GA.size;
   ['step2', 'step3'].forEach(id => $(id).setAttribute('data-locked', pronto ? 'false' : 'true'));
   $('pill2').classList.toggle('is-active', !!pronto); $('pill3').classList.toggle('is-active', !!pronto);
   $('pill1').classList.toggle('is-done', !!pronto);
   if (!pronto){ M = null; $('confTiles').innerHTML = ''; return; }
-  M = conciliar({ guias:E.guias, razao:E.razao, nomesEdit:E.nomesEdit, listaNomes:E.listaNomes, contas:E.contas });
+  M = conciliar({ guias:GA, razao:E.razao, nomesEdit:E.nomesEdit, listaNomes:E.listaNomes, contas:E.contas });
   renderConferencia(); renderAjustes(); renderResumos();
 }
 function statusGuia(x){
@@ -1004,10 +1031,16 @@ $('filtroMes').addEventListener('change', e => { E.filtroMes = e.target.value; r
 
 /* ===================== PARÂMETROS ===================== */
 const CAMPOS_CONTA = { cFgts:'fgts', cDespesa:'despesa', cProv13:'prov13', cSalarios:'salarios', cJuros:'juros' };
+function preencherContas(){ Object.entries(CAMPOS_CONTA).forEach(([id, k]) => { $(id).value = E.contas[k] || ''; }); }
+preencherContas();
 Object.entries(CAMPOS_CONTA).forEach(([id, k]) => {
-  $(id).value = E.contas[k] || '';
-  $(id).addEventListener('change', () => { E.contas[k] = $(id).value.trim(); lsSet(LS.contas, E.contas); E.ajEdit = {}; recalcular(); });
+  $(id).addEventListener('change', () => {
+    E.contas[k] = $(id).value.trim();
+    const salvo = lsGet(LS.contasEmp, {}); salvo[(E.razao && E.razao.empresa) || '_'] = E.contas; lsSet(LS.contasEmp, salvo);
+    E.ajEdit = {}; recalcular();
+  });
 });
+$('selCnpj').addEventListener('change', e => { E.cnpj = e.target.value; lsSet(LS.cnpj, E.cnpj); E.ajEdit = {}; recalcular(); });
 $('dataUnica').addEventListener('change', e => { E.dataUnica = e.target.value; atualizarTotaisAj(); });
 $('empresa').addEventListener('change', () => { E.empresa = $('empresa').value; });
 $('listaNomes').value = E.listaNomes.join('\n');
