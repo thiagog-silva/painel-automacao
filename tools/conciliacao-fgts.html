@@ -1,0 +1,1028 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="hub-nome" content="Conciliação FGTS">
+<meta name="hub-descricao" content="Lê as guias do FGTS Digital (PDF) e o razão do FGTS a recolher, confere pagamentos e competências (inclusive rescisões com parte em outro mês), gera a planilha de ajuste e os resumos de copiar e colar.">
+<meta name="hub-icone" content="🧾">
+<meta name="hub-categoria" content="Folha de Pagamento">
+<title>Conciliação FGTS — Guias x Razão</title>
+<!--
+  VERSÃO 1.0.0 — 2026-11-25.
+  Entradas: PDFs "GFD - Guia do FGTS Digital" (quantos quiser; repetidas são ignoradas pelo identificador)
+  e o razão analítico (CSV) da conta FGTS a recolher (2.1.1.01.0008).
+  Saídas: conferência pagamentos x guias, razão x guias por competência, ajustes (planilha de importação
+  Planilha1) e dois resumos de copiar e colar (mensal e rescisões por funcionário).
+-->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#f5f7f5;
+  --surface:#ffffff;
+  --surface-alt:#eef2ef;
+  --ink:#182420;
+  --muted:#5c6f68;
+  --border:#dbe3de;
+  --accent:#0f5d52;
+  --accent-strong:#0b453d;
+  --accent-ink:#f4fbf9;
+  --accent-soft:#e0efec;
+  --danger:#b3261e;
+  --danger-soft:#fbe9e6;
+  --warning:#8a5a00;
+  --warning-soft:#fff1d9;
+  --success:#1e7d4a;
+  --success-soft:#e5f4ea;
+  --tag-debito-bg:#fff1d9;
+  --tag-debito-ink:#8a5a00;
+  --tag-credito-bg:#e3edfb;
+  --tag-credito-ink:#1b4f8a;
+  --shadow: 0 1px 2px rgba(15,30,25,.06), 0 8px 24px -12px rgba(15,30,25,.22);
+  --radius:14px;
+  --font-display:'IBM Plex Sans Condensed', 'IBM Plex Sans', sans-serif;
+  --font-body:'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono:'IBM Plex Mono', ui-monospace, SFMono-Regular, monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9;
+    --muted:#94a6a0; --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6;
+    --accent-ink:#08201b; --accent-soft:#1a332d; --danger:#ff9d93; --danger-soft:#3a201d;
+    --warning:#ffcf70; --warning-soft:#3a2c12; --success:#8fe3ac; --success-soft:#173425;
+    --tag-debito-bg:#3a2c12; --tag-debito-ink:#ffcf70; --tag-credito-bg:#182b3d; --tag-credito-ink:#8fc2ff;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101614; --surface:#182120; --surface-alt:#1e2926; --ink:#e6ede9;
+  --muted:#94a6a0; --border:#2b3733; --accent:#57d9c1; --accent-strong:#8ee9d6;
+  --accent-ink:#08201b; --accent-soft:#1a332d; --danger:#ff9d93; --danger-soft:#3a201d;
+  --warning:#ffcf70; --warning-soft:#3a2c12; --success:#8fe3ac; --success-soft:#173425;
+  --tag-debito-bg:#3a2c12; --tag-debito-ink:#ffcf70; --tag-credito-bg:#182b3d; --tag-credito-ink:#8fc2ff;
+  --shadow: 0 1px 2px rgba(0,0,0,.35), 0 12px 28px -14px rgba(0,0,0,.65);
+}
+
+*{ box-sizing:border-box; }
+body{
+  background:var(--bg); color:var(--ink); font-family:var(--font-body);
+  margin:0; padding-inline:16px; padding-block:20px 60px; line-height:1.45;
+}
+h1,h2,h3{ font-family:var(--font-display); font-weight:700; text-wrap:balance; margin:0; }
+.mono{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; }
+.app-shell{ max-width:1180px; margin:0 auto; }
+
+.topbar{
+  position:sticky; top:env(safe-area-inset-top,0px); z-index:30;
+  background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--border); margin:-20px -16px 28px; padding:16px;
+}
+.topbar-inner{ max-width:1180px; margin:0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:14px 24px; justify-content:space-between; }
+.brand{ display:flex; align-items:center; gap:12px; }
+.brand-mark{
+  width:38px; height:38px; border-radius:10px; background:var(--accent); color:var(--accent-ink);
+  display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-weight:700; font-size:15px;
+  box-shadow:var(--shadow); flex:none;
+}
+.brand h1{ font-size:19px; letter-spacing:.2px; }
+.brand p{ margin:2px 0 0; font-size:12.5px; color:var(--muted); max-width:520px; }
+.steps-pills{ display:flex; gap:8px; flex-wrap:wrap; }
+.step-pill{
+  font-family:var(--font-mono); font-size:11.5px; letter-spacing:.03em; padding:6px 11px; border-radius:999px;
+  border:1px solid var(--border); color:var(--muted); background:var(--surface); white-space:nowrap;
+}
+.step-pill.is-active{ border-color:var(--accent); color:var(--accent-strong); background:var(--accent-soft); font-weight:600; }
+.step-pill.is-done{ color:var(--success); border-color:var(--success); }
+
+.step-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+  padding:26px; margin-bottom:22px; box-shadow:var(--shadow);
+}
+.step-head{ display:flex; align-items:flex-start; gap:14px; margin-bottom:18px; }
+.step-num{
+  width:32px; height:32px; border-radius:9px; background:var(--surface-alt); color:var(--ink);
+  font-family:var(--font-mono); font-weight:600; font-size:14px; display:flex; align-items:center; justify-content:center; flex:none;
+  border:1px solid var(--border);
+}
+.step-head h2{ font-size:20px; }
+.step-head .step-sub{ margin:3px 0 0; color:var(--muted); font-size:13.5px; max-width:64ch; }
+
+.dropzone{
+  border:1.5px dashed var(--border); border-radius:12px; padding:30px 20px; text-align:center;
+  background:var(--surface-alt); cursor:pointer; transition:border-color .15s, background .15s;
+}
+.dropzone:hover, .dropzone.drag{ border-color:var(--accent); background:var(--accent-soft); }
+.dropzone strong{ color:var(--ink); }
+input[type="file"]{ display:none; }
+.file-chip{
+  display:inline-flex; align-items:center; gap:8px; margin-top:14px; padding:7px 12px; border-radius:9px;
+  background:var(--accent-soft); color:var(--accent-strong); font-size:13px; font-family:var(--font-mono); word-break:break-all;
+}
+.progress-wrap{ margin-top:16px; display:none; }
+.progress-bar-bg{ background:var(--surface-alt); border-radius:6px; height:8px; overflow:hidden; }
+.progress-bar{ background:var(--accent); height:100%; width:0%; transition:width .15s; }
+.progress-label{ font-size:12.5px; color:var(--muted); margin-top:6px; }
+#errorBox{ display:none; margin-top:14px; padding:12px 14px; border-radius:9px; background:var(--danger-soft); color:var(--danger); font-size:13px; white-space:pre-wrap; }
+
+.field-row{ display:flex; flex-wrap:wrap; gap:16px; margin-top:16px; }
+.field{ display:flex; flex-direction:column; gap:5px; min-width:190px; flex:1; }
+.field label{ font-size:12px; color:var(--muted); font-weight:600; letter-spacing:.02em; text-transform:uppercase; }
+select, input[type="text"], input[type="number"]{
+  font-family:var(--font-body); font-size:13.5px; padding:9px 10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--surface); color:var(--ink); width:100%;
+}
+select:focus, input:focus, button:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+input[type="text"].mono{ font-family:var(--font-mono); }
+
+.summary-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:8px 0 18px; }
+.summary-tile{ background:var(--surface-alt); border:1px solid var(--border); border-radius:10px; padding:14px 16px; }
+.summary-tile .n{ font-family:var(--font-mono); font-size:22px; font-weight:600; }
+.summary-tile .l{ font-size:11.5px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin-top:2px; }
+.summary-tile.accent{ background:var(--accent-soft); }
+.summary-tile.accent .n{ color:var(--accent-strong); }
+.summary-tile.warn .n{ color:var(--warning); }
+
+.group-head{ display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+.group-head h3{ font-size:16px; }
+
+.table-wrap{ overflow-x:auto; border:1px solid var(--border); border-radius:10px; margin-top:14px; max-height:420px; overflow-y:auto; }
+table{ border-collapse:collapse; width:100%; font-size:13px; }
+thead th{
+  position:sticky; top:0; background:var(--surface-alt); text-align:left; padding:9px 10px; font-size:11.5px;
+  text-transform:uppercase; letter-spacing:.04em; color:var(--muted); border-bottom:1px solid var(--border); white-space:nowrap;
+}
+tbody td{ padding:8px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+tbody tr:last-child td{ border-bottom:none; }
+td.mono, th.mono{ font-family:var(--font-mono); }
+
+.tag{ display:inline-flex; align-items:center; gap:5px; font-family:var(--font-mono); font-size:11.5px; font-weight:600; padding:4px 9px; border-radius:999px; white-space:nowrap; background:var(--accent-soft); color:var(--accent-strong); }
+.tag-debito{ background:var(--tag-debito-bg); color:var(--tag-debito-ink); }
+.tag-credito{ background:var(--tag-credito-bg); color:var(--tag-credito-ink); }
+.tag-ok{ background:var(--success-soft); color:var(--success); }
+.tag-warn{ background:var(--warning-soft); color:var(--warning); }
+
+button{ font-family:var(--font-body); cursor:pointer; border:none; border-radius:9px; font-weight:600; font-size:13.5px; }
+.btn-primary{ background:var(--accent); color:var(--accent-ink); padding:11px 20px; box-shadow:var(--shadow); border:none; }
+.btn-primary:disabled{ background:var(--muted); opacity:.45; cursor:not-allowed; box-shadow:none; }
+.btn-secondary{ background:var(--surface-alt); color:var(--ink); border:1px solid var(--border); padding:10px 16px; }
+.btn-ghost{ background:transparent; color:var(--muted); border:1px solid var(--border); padding:10px 16px; }
+.btn-link{ background:none; border:none; padding:0; font-size:12.5px; color:var(--accent); text-decoration:underline; font-weight:600; }
+.actions-row{ display:flex; flex-wrap:wrap; gap:12px; margin-top:18px; align-items:center; }
+.hint{ font-size:12.5px; color:var(--muted); }
+.hint.warn{ color:var(--warning); }
+.hint.err{ color:var(--danger); }
+
+.copy-preview{ width:100%; min-height:120px; font-family:var(--font-mono); font-size:12.5px; border:1px solid var(--border); border-radius:10px; padding:10px; margin-top:10px; white-space:pre; overflow:auto; background:var(--surface-alt); color:var(--ink); }
+.status-msg{ font-size:13px; padding:9px 13px; border-radius:9px; background:var(--accent-soft); color:var(--accent-strong); }
+.empty-cell{ color:var(--muted); }
+
+
+.razao-block{ margin-top:26px; padding-top:22px; border-top:1px solid var(--border); }
+.razao-block:first-of-type{ margin-top:10px; padding-top:0; border-top:none; }
+.conta-badge{
+  display:inline-flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:11px; font-weight:600;
+  padding:3px 9px; border-radius:999px; background:var(--accent-soft); color:var(--accent-strong);
+}
+.file-list{ display:flex; flex-direction:column; gap:8px; margin-top:14px; }
+.file-list .file-chip{ margin-top:0; justify-content:space-between; }
+.file-chip .rm{ cursor:pointer; color:var(--muted); font-weight:700; margin-left:10px; }
+.empty-hint{
+  border:1px dashed var(--border); border-radius:10px; padding:16px; text-align:center; color:var(--muted);
+  font-size:13px; margin-top:14px;
+}
+
+.step-card[data-locked="true"]{ opacity:.45; pointer-events:none; }
+.toast-host{ position:fixed; right:16px; bottom:calc(16px + env(safe-area-inset-bottom,0px)); z-index:60; display:flex; flex-direction:column; gap:8px; max-width:min(380px, calc(100vw - 32px)); }
+.toast{ background:var(--ink); color:var(--bg); padding:11px 14px; border-radius:9px; font-size:13px; box-shadow:var(--shadow); animation:toast-in .18s ease-out; }
+.toast.toast-err{ background:var(--danger); color:#fff; }
+.toast.toast-ok{ background:var(--success); color:#08201b; }
+@keyframes toast-in{ from{ transform:translateY(6px); opacity:0; } to{ transform:none; opacity:1; } }
+.file-chip .rm{ cursor:pointer; color:var(--muted); font-weight:700; margin-left:10px; }
+#chips{ display:flex; flex-wrap:wrap; gap:8px; }
+.tag-err{ background:var(--danger-soft); color:var(--danger); }
+.muted{ color:var(--muted); }
+.small{ font-size:12px; }
+.r{ text-align:right; }
+.ok{ color:var(--success); font-weight:600; }
+.bad{ color:var(--danger); font-weight:600; }
+.okc{ color:var(--muted); }
+.badc{ color:var(--danger); font-weight:700; }
+.table-wrap{ max-height:none; }
+#tbGuias, #tbComp{ }
+.table-wrap.alto{ max-height:560px; overflow-y:auto; }
+.cell-input{ min-width:120px; padding:6px 8px; font-size:12.5px; }
+input.aj-deb, input.aj-cred{ min-width:150px; }
+.cell-input.falta{ border-color:var(--danger); background:var(--danger-soft); }
+input[type="text"].aj-hist{ min-width:260px; }
+td.obs{ white-space:normal; min-width:300px; max-width:420px; color:var(--muted); }
+td.small{ white-space:normal; min-width:230px; }
+tr.row-warn td{ background:var(--warning-soft); }
+.empty-state{ text-align:center; padding:26px 16px; color:var(--success); white-space:normal; }
+fieldset{ border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin:18px 0 0; }
+legend{ padding:0 6px; font-size:12.5px; font-weight:700; color:var(--accent-strong); text-transform:uppercase; letter-spacing:.03em; }
+details{ margin-top:14px; }
+details summary{ cursor:pointer; font-weight:600; font-size:13px; color:var(--accent-strong); }
+textarea.lista{ width:100%; min-height:90px; font-family:var(--font-mono); font-size:12.5px; border:1px solid var(--border); border-radius:8px; padding:10px; background:var(--surface); color:var(--ink); margin-top:8px; }
+input[type="date"]{ font-family:var(--font-body); font-size:13px; padding:6px 8px; border-radius:8px; border:1px solid var(--border); background:var(--surface); color:var(--ink); }
+input[type="checkbox"]{ width:16px; height:16px; accent-color:var(--accent); }
+.sub-h{ margin:26px 0 4px; font-size:16px; }
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-mark">FG</div>
+        <div>
+          <h1>Conciliação FGTS</h1>
+          <p>Guias do FGTS Digital (PDF) x razão da conta FGTS a recolher: confere pagamentos e competências, gera os ajustes e os resumos de copiar e colar.</p>
+        </div>
+      </div>
+      <div class="steps-pills">
+        <span class="step-pill is-active" id="pill1">1 · Arquivos</span>
+        <span class="step-pill" id="pill2">2 · Conferência</span>
+        <span class="step-pill" id="pill3">3 · Ajustes e resumos</span>
+      </div>
+    </div>
+  </div>
+
+  <section id="step1" class="step-card">
+    <div class="step-head">
+      <div class="step-num">1</div>
+      <div>
+        <h2>Anexe as guias (PDF) e o razão (CSV)</h2>
+        <p class="step-sub">Pode soltar tudo junto: os PDFs das guias GFD e o CSV do razão analítico da conta FGTS a recolher. As guias ficam salvas neste navegador; para os meses seguintes basta anexar as novas e o razão atualizado.</p>
+      </div>
+    </div>
+    <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Selecionar guias e razão">
+      <div>Arraste os arquivos aqui ou <strong>clique para escolher</strong></div>
+    </div>
+    <input type="file" id="fileInput" accept=".pdf,.csv,.txt" multiple>
+    <div id="chips" style="margin-top:14px"></div>
+    <div class="hint" id="progresso" style="margin-top:8px"></div>
+
+    <fieldset>
+      <legend>Contas e parâmetros</legend>
+      <div class="field-row" style="margin-top:0">
+        <div class="field"><label for="cFgts">FGTS a recolher</label><input type="text" id="cFgts" class="mono"></div>
+        <div class="field"><label for="cDespesa">Despesa de FGTS</label><input type="text" id="cDespesa" class="mono"></div>
+        <div class="field"><label for="cProv13">Provisão FGTS 13º</label><input type="text" id="cProv13" class="mono"></div>
+        <div class="field"><label for="cSalarios">Salários a pagar</label><input type="text" id="cSalarios" class="mono"></div>
+        <div class="field"><label for="cJuros">Despesa de juros/multa</label><input type="text" id="cJuros" class="mono" placeholder="informe a conta"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label for="empresa">Código da empresa (planilha)</label><input type="text" id="empresa" class="mono"></div>
+        <div class="field"><label for="histPadrao">Código do histórico padrão</label><input type="text" id="histPadrao" class="mono" value="182"></div>
+        <div class="field"><label for="dataUnica">Data única dos ajustes (opcional)</label><input type="date" id="dataUnica"></div>
+      </div>
+      <div class="hint">Sem data única, cada ajuste usa o último dia da competência de origem (assim o razão separa certo por mês na próxima conferência). Use a data única só se esses meses já estiverem fechados.</div>
+    </fieldset>
+
+    <details>
+      <summary>Nomes completos dos demitidos (opcional)</summary>
+      <div class="hint" style="margin-top:6px">As guias trazem só o primeiro nome (ou nenhum). Cole aqui a lista de nomes completos, um por linha, e a ferramenta completa sozinha quando o primeiro nome casar com um só. Também dá para digitar direto na tabela da etapa 2.</div>
+      <textarea class="lista" id="listaNomes" placeholder="ROSALINO NEVES DOS SANTOS&#10;MAYKON FRANCO DE MELO MORAIS"></textarea>
+    </details>
+  </section>
+
+  <section id="step2" class="step-card" data-locked="true">
+    <div class="step-head">
+      <div class="step-num">2</div>
+      <div>
+        <h2>Conferência</h2>
+        <p class="step-sub">Cada pagamento do razão é pareado com uma guia por valor e data. Depois, o que a folha provisionou em cada competência é comparado com o que as guias cobraram. Partes de uma rescisão que pertencem a outro mês (ex.: FGTS mensal do mês anterior pago na GRRF) são comparadas na competência delas, para não duplicar nem faltar.</p>
+      </div>
+    </div>
+    <div class="summary-grid" id="confTiles"></div>
+    <div id="confAvisos"></div>
+    <h3 class="sub-h">Guias</h3>
+    <div class="table-wrap alto"><table>
+      <thead><tr><th>Tipo</th><th>Pago em</th><th>Tag da guia</th><th>Total</th><th>Razão</th><th>Funcionário (rescisão)</th><th>Partes por competência</th></tr></thead>
+      <tbody id="tbGuias"></tbody>
+    </table></div>
+    <h3 class="sub-h">Razão x guias por competência</h3>
+    <div class="table-wrap alto"><table>
+      <thead><tr><th>Competência</th><th>Categoria</th><th class="r">Razão (provisão da folha)</th><th class="r">Guias</th><th class="r">Diferença (razão − guias)</th></tr></thead>
+      <tbody id="tbComp"></tbody>
+    </table></div>
+  </section>
+
+  <section id="step3" class="step-card" data-locked="true">
+    <div class="step-head">
+      <div class="step-num">3</div>
+      <div>
+        <h2>Ajustes e resumos para copiar</h2>
+        <p class="step-sub">Os ajustes lançam o que as guias cobraram e o razão não tem. Rescisão sem provisão sai por funcionário (<em>FGTS Rescisao - NOME</em>). Revise contas, histórico e data; o que está "confirmar" depende de conferir a folha do mês.</p>
+      </div>
+    </div>
+    <div class="summary-grid" id="ajTiles"></div>
+    <div class="table-wrap"><table>
+      <thead><tr><th></th><th>Comp.</th><th>Conta débito</th><th>Conta crédito</th><th class="r">Valor</th><th>Histórico</th><th>Data</th><th>Confiança</th><th>Observação</th></tr></thead>
+      <tbody id="tbAj"></tbody>
+    </table></div>
+    <div class="actions-row">
+      <button class="btn-primary" id="btnXlsx" disabled>Baixar planilha de importação</button>
+      <button class="btn-secondary" id="btnCopiarAj" disabled>Copiar ajustes</button>
+    </div>
+
+    <h3 class="sub-h">Resumos de copiar e colar</h3>
+    <div class="field-row" style="margin-top:6px"><div class="field" style="max-width:280px"><label for="filtroMes">Pagamentos feitos em</label><select id="filtroMes"></select></div></div>
+    <div class="hint" style="margin-top:8px">Todos os pagamentos (mensal, consignado e rescisões) em ordem de data. Cada um mantém o histórico igual ao do razão e vem seguido da baixa da provisão, com sinal negativo (rescisão: FGTS Rescisao - NOME), e o bloco soma zero. O que não tem par (guia sem lançamento no razão ou pagamento sem guia) fica no final.</div>
+
+    <div style="margin-top:18px">
+      <div class="group-head"><h3>Resumo dos pagamentos (por data)</h3><span class="hint" id="cntResumo"></span></div>
+      <textarea class="copy-preview" id="txtResumo" readonly style="min-height:320px"></textarea>
+      <div class="actions-row"><button class="btn-primary" id="btnCopiarResumo">Copiar resumo</button></div>
+    </div>
+  </section>
+</div>
+<div class="toast-host" id="toasts"></div>
+
+<script>
+// PONTE DE CAPACIDADES (hub): repassa window.claude.use('downloads') para a janela pai quando roda em iframe.
+(function(){
+  if (window.top === window.self) return;
+  if (window.claude && window.claude.use) return;
+  let proximoId = 1;
+  const pendentes = {};
+  window.addEventListener('message', (ev) => {
+    const msg = ev.data;
+    if (!msg || msg.__ponteClaude !== true || msg.tipo !== 'resposta') return;
+    const p = pendentes[msg.id];
+    if (!p) return;
+    delete pendentes[msg.id];
+    if (msg.erro) p.reject(msg.erro); else p.resolve(msg.resultado);
+  });
+  function chamarHub(acao, payload){
+    return new Promise((resolve, reject) => {
+      const id = proximoId++;
+      pendentes[id] = { resolve, reject };
+      window.parent.postMessage({ __ponteClaude: true, tipo: 'chamada', id, acao, payload }, '*');
+    });
+  }
+  window.claude = {
+    use: async (nome) => {
+      if (nome !== 'downloads') return null;
+      return { save: (req) => chamarHub('downloads.save', req) };
+    }
+  };
+})();
+/* ===================== UTILIDADES ===================== */
+const r2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+const pad2 = n => String(n).padStart(2, '0');
+function parseBR(s){
+  if (s === null || s === undefined) return 0;
+  s = String(s).trim().replace(/^"|"$/g, '');
+  if (!s) return 0;
+  const n = parseFloat(s.replace(/\./g, '').replace(',', '.'));
+  return isNaN(n) ? 0 : n;
+}
+function fmtBR(n){
+  n = r2(n || 0);
+  const neg = n < 0;
+  const [i, d] = Math.abs(n).toFixed(2).split('.');
+  return (neg ? '-' : '') + i.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ',' + d;
+}
+function parseDMY(s){
+  const m = /^(\d\d)\/(\d\d)\/(\d{4})$/.exec(String(s || '').trim());
+  return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null;
+}
+const fmtDMY = d => pad2(d.getDate()) + '/' + pad2(d.getMonth() + 1) + '/' + d.getFullYear();
+const isoDe = d => d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+const deIso = s => { const m = /^(\d{4})-(\d\d)-(\d\d)$/.exec(s || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; };
+const compDe = d => pad2(d.getMonth() + 1) + '/' + d.getFullYear();            // Date -> "MM/AAAA"
+const compKey = c => { const [mm, yy] = c.split('/'); return +yy * 100 + +mm; };
+const fimDoMes = c => { const [mm, yy] = c.split('/').map(Number); return new Date(yy, mm, 0); };
+const compPonto = c => c.replace('/', '.');
+const normTxt = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+
+/* ===================== GUIA GFD (linhas de texto do PDF) ===================== */
+const NUM = '(\\d[\\d.]*,\\d\\d)';
+const RE_FGTS = new RegExp('^(\\d\\d/\\d{4})\\s+(\\d+)\\s+' + NUM + '\\s+' + NUM + '\\s+' + NUM + '\\s+' + NUM + '\\s+' + NUM + '$');
+const RE_CONS = new RegExp('^(\\d\\d/\\d{4})\\s+' + NUM + '\\s+' + NUM + '\\s+' + NUM + '$');
+
+function parseGuiaLinhas(L){
+  const g = { id:null, tag:'', cnpj:null, empresa:null, venc:null, gerada:null, pago:null, total:null, fgts:[], cons:[], avisos:[] };
+  let sec = null, m;
+  for (const l of L){
+    if (!g.venc && /^\d\d\/\d\d\/\d{4}$/.test(l)){ g.venc = l; continue; }
+    if (!g.cnpj && (m = l.match(/^(\d\d\.\d{3}\.\d{3})\s+(.+)$/))){ g.cnpj = m[1]; g.empresa = m[2].trim(); continue; }
+    if (!g.id && (m = l.match(/^\d+\s+(\d{16}-\d)\s*(.*)$/))){ g.id = m[1]; g.tag = (m[2] || '').trim(); continue; }
+    if (/Informa\S+es de recolhimentos do FGTS/i.test(l)){ sec = 'f'; continue; }
+    if (/Informa\S+es de recolhimentos do Consignado/i.test(l)){ sec = 'c'; continue; }
+    if (/^Total da Guia/i.test(l)){ m = l.match(NUM); if (m) g.total = parseBR(m[1]); sec = null; continue; }
+    if (/Guia paga em/i.test(l)){ m = l.match(/(\d\d\/\d\d\/\d{4})/); if (m) g.pago = m[1]; continue; }
+    if (/Data de gera\S+o da Guia/i.test(l)){ m = l.match(/(\d\d\/\d\d\/\d{4})/); if (m) g.gerada = m[1]; continue; }
+    if (sec === 'f' && (m = l.match(RE_FGTS))){
+      g.fgts.push({ comp:m[1], trab:+m[2], mensal:parseBR(m[3]), resc:parseBR(m[4]), ind:parseBR(m[5]), enc:parseBR(m[6]), total:parseBR(m[7]) });
+    } else if (sec === 'c' && (m = l.match(RE_CONS))){
+      g.cons.push({ comp:m[1], valor:parseBR(m[2]), enc:parseBR(m[3]), total:parseBR(m[4]) });
+    }
+  }
+  if (!g.id) throw new Error('não achei o identificador da guia (este PDF é uma guia do FGTS Digital?)');
+  if (g.total === null) throw new Error('não achei o "Total da Guia"');
+  if (!g.fgts.length && !g.cons.length) throw new Error('não achei nenhuma competência na guia');
+  const soma = r2(g.fgts.reduce((a, x) => a + x.total, 0) + g.cons.reduce((a, x) => a + x.total, 0));
+  if (Math.abs(soma - g.total) > 0.005) throw new Error('a soma das competências (' + fmtBR(soma) + ') não fecha com o total da guia (' + fmtBR(g.total) + ')');
+  return g;
+}
+
+// itens do pdf.js -> linhas (agrupa por posição vertical, ordena da esquerda p/ direita)
+function agruparLinhas(itens){
+  const linhas = [];
+  for (const it of itens){
+    if (String(it.str).trim() === '') continue;
+    const y = it.transform[5], x = it.transform[4];
+    let l = linhas.find(k => Math.abs(k.y - y) < 2.5);
+    if (!l){ l = { y, it: [] }; linhas.push(l); }
+    l.it.push({ s: it.str, x });
+  }
+  linhas.sort((a, b) => b.y - a.y);
+  return linhas.map(l => l.it.sort((a, b) => a.x - b.x).map(i => i.s).join(' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
+}
+
+/* ===================== RAZÃO (CSV analítico) ===================== */
+function decodificarBuffer(buf){
+  const u = new TextDecoder('utf-8').decode(buf);
+  if ((u.match(/\uFFFD/g) || []).length > 3) return new TextDecoder('windows-1252').decode(buf);
+  return u;
+}
+function dividirLinhaCsv(linha, delim){
+  const out = []; let cur = '', asp = false;
+  for (let i = 0; i < linha.length; i++){
+    const c = linha[i];
+    if (asp){ if (c === '"'){ if (linha[i + 1] === '"'){ cur += '"'; i++; } else asp = false; } else cur += c; }
+    else { if (c === '"') asp = true; else if (c === delim){ out.push(cur); cur = ''; } else cur += c; }
+  }
+  out.push(cur); return out;
+}
+function catHist(h){
+  const t = normTxt(h);
+  if (/^PGTO/.test(t)) return 'pagamento';
+  if (/CONSIGNADO/.test(t)) return 'cons';
+  if (/JUROS|ENCARGO/.test(t)) return 'enc';
+  if (/40\s*%|RESC|A\.P\.I|IND DEP/.test(t)) return 'resc';
+  if (/13\S?\s*SAL\S?RIO|FGTS MENSAL|(^|\s)FGTS\s*$/.test(t)) return 'mensal';
+  return 'outro';
+}
+function parseRazao(texto){
+  const linhas = texto.split(/\r?\n/);
+  const R = { conta:null, empresa:null, saldoIni:0, saldoFim:0, periodoFim:null, linhas:[], pagamentos:[], provisoes:[] };
+  let ano = null, pfDia = null, pfMes = null, m;
+  for (const l of linhas){
+    if (ano === null && (m = l.match(/Ano Exerc\S*\s*:\s*(\d{4})/i))) ano = +m[1];
+    if (pfMes === null && (m = l.match(/Per\S*odo Final\s*:\s*(\d\d)\/(\d\d)/i))){ pfDia = +m[1]; pfMes = +m[2]; }
+  }
+  const h = linhas.findIndex(l => /^;PLANO CONTABIL/i.test(l.trim()));
+  if (h < 0) throw new Error('não encontrei o cabeçalho ";PLANO CONTABIL" — é o razão analítico exportado em CSV?');
+  for (let i = h + 1; i < linhas.length; i++){
+    const l = linhas[i];
+    if (!l || !l.trim()) continue;
+    if (/^RAZ\S*O ANAL\S*TICO/i.test(l.trim())) break;
+    const c = dividirLinhaCsv(l, ';').map(x => x.trim());
+    if (c.length < 15 || !/^\d\d\/\d{4}$/.test(c[0])) continue;
+    const data = parseDMY(c[6]);
+    if (!data) continue;
+    const x = { mes:c[0], data, dataStr:c[6], tipo:c[8], cp:c[10], hist:c[11], deb:parseBR(c[12]), cred:parseBR(c[13]) };
+    if (!R.linhas.length){
+      R.conta = c[1]; R.empresa = parseInt(c[7], 10) || null;
+      R.saldoIni = parseBR(c[4]) * (c[5] === 'D' ? -1 : 1);
+    }
+    R.saldoFim = parseBR(c[14]) * (c[15] === 'D' ? -1 : 1);
+    x.cat = catHist(x.hist);
+    // se o histórico traz a competência (MM.AAAA, como nos ajustes gerados aqui), ela vale mais que o mês do lançamento
+    const mc = x.hist.match(/\b(0[1-9]|1[0-2])\.(\d{4})\b/);
+    x.comp = mc ? mc[1] + '/' + mc[2] : x.mes;
+    R.linhas.push(x);
+    if (x.cat === 'pagamento' && x.deb > 0) R.pagamentos.push(x); else R.provisoes.push(x);
+  }
+  if (!R.linhas.length) throw new Error('o CSV não tem nenhum lançamento');
+  R.periodoFim = (ano && pfMes) ? new Date(ano, pfMes - 1, pfDia) : new Date(Math.max(...R.linhas.map(x => +x.data)));
+  return R;
+}
+
+/* ===================== CONCILIAÇÃO ===================== */
+const CONTAS_PADRAO = {
+  fgts: '2.1.1.01.0008',     // FGTS a recolher
+  despesa: '3.1.3.01.0008',  // despesa de FGTS
+  prov13: '2.1.5.01.0003',   // provisão FGTS 13º
+  salarios: '2.1.1.01.0001', // salários a pagar (consignado vem daqui)
+  juros: '3.1.5.02.0001'     // despesa de juros/multa
+};
+
+function partesDaGuia(g){
+  const P = [];
+  for (const x of g.fgts){
+    if (x.mensal > 0) P.push({ comp:x.comp, cat:'mensal', valor:x.mensal });
+    if (x.resc + x.ind > 0) P.push({ comp:x.comp, cat:'resc', valor:r2(x.resc + x.ind), resc:x.resc, ind:x.ind });
+    if (x.enc > 0) P.push({ comp:x.comp, cat:'enc', valor:x.enc });
+  }
+  for (const x of g.cons){
+    if (x.valor > 0) P.push({ comp:x.comp, cat:'cons', valor:x.valor });
+    if (x.enc > 0) P.push({ comp:x.comp, cat:'enc', valor:x.enc });
+  }
+  return P;
+}
+function nomeDaTag(tag){
+  if (!tag || /\d\d:\d\d/.test(tag) || /^\d/.test(tag)) return '';
+  const t = normTxt(tag).replace(/\b(GUIA|GRRF|GRF|RESCISAO|RESC|FGTS)\b/g, '').replace(/\s+/g, ' ').trim();
+  return t;
+}
+function nomeDoPagamento(hist){
+  const m = String(hist || '').match(/^PGTO\s+\S+\s*\/\s*(.+?)\s*\/\s*\d+\s*$/i);
+  if (!m) return '';
+  const n = normTxt(m[1]);
+  return (n === 'FGTS' || !n) ? '' : n;
+}
+function completarNome(base, lista){
+  if (!base) return '';
+  const b = normTxt(base);
+  const achados = (lista || []).map(normTxt).filter(Boolean).filter(n => n === b || n.startsWith(b + ' ') || b.split(' ').every(w => n.split(' ').includes(w)));
+  return achados.length === 1 ? achados[0] : b;
+}
+
+function conciliar(E){
+  const R = E.razao;
+  const C = Object.assign({}, CONTAS_PADRAO, E.contas || {});
+  const fim = R.periodoFim, fimKey = compKey(compDe(fim));
+  const guias = [...E.guias.values()].map(g => {
+    const partes = partesDaGuia(g);
+    return { g, id:g.id, tipo: g.fgts.some(x => x.resc > 0 || x.ind > 0) ? 'rescisao' : 'mensal', partes, pago: g.pago ? parseDMY(g.pago) : null, pag: null, nome: '' };
+  }).sort((a, b) => ((a.pago || 0) - (b.pago || 0)) || a.id.localeCompare(b.id));
+
+  // --- pagamentos do razão x guias (valor + data; depois só valor)
+  const usadas = new Set(), semGuia = [], dataDiferente = [];
+  for (const p of R.pagamentos){
+    let c = guias.find(x => !usadas.has(x.id) && Math.abs(x.g.total - p.deb) < 0.005 && x.g.pago === p.dataStr);
+    if (!c){ c = guias.find(x => !usadas.has(x.id) && Math.abs(x.g.total - p.deb) < 0.005); if (c) dataDiferente.push({ guia:c, pag:p }); }
+    if (c){ usadas.add(c.id); c.pag = p; } else semGuia.push(p);
+  }
+  // --- nomes (rescisão)
+  for (const x of guias){
+    if (x.tipo !== 'rescisao') continue;
+    const manual = (E.nomesEdit || {})[x.id];
+    const base = nomeDoPagamento(x.pag && x.pag.hist) || nomeDaTag(x.g.tag);
+    x.nomeBase = base;
+    x.nome = manual ? normTxt(manual) : completarNome(base, E.listaNomes);
+    x.nomeEditado = !!manual;
+  }
+  const foraPeriodo = x => x.pago && x.pago > fim;
+  const compRescisao = x => { const p = x.partes.find(k => k.cat === 'resc'); return p ? p.comp : null; };
+  guias.forEach(x => { x.compResc = x.tipo === 'rescisao' ? compRescisao(x) : null; });
+
+  // --- competência: razão x guias
+  const CATS = ['mensal', 'resc', 'cons', 'enc'];
+  const rz = {}, gu = {}, debito13 = {};
+  for (const x of R.provisoes){
+    if (!CATS.includes(x.cat)) continue;
+    const k = x.comp + '|' + x.cat;
+    rz[k] = r2((rz[k] || 0) + x.cred - x.deb);
+    if (x.cat === 'mensal' && x.deb > 0 && /13\S?\s*SAL\S?RIO/.test(normTxt(x.hist))) debito13[x.comp] = r2((debito13[x.comp] || 0) + x.deb);
+  }
+  for (const x of guias) for (const p of x.partes){
+    if (compKey(p.comp) > fimKey) continue;
+    const k = p.comp + '|' + p.cat; gu[k] = r2((gu[k] || 0) + p.valor);
+  }
+  const outros = R.provisoes.filter(x => x.cat === 'outro');
+  const comps = [...new Set([...Object.keys(rz), ...Object.keys(gu)].map(k => k.split('|')[0]))].sort((a, b) => compKey(a) - compKey(b));
+  const linhasComp = [];
+  for (const c of comps) for (const cat of CATS){
+    const a = rz[c + '|' + cat] || 0, b = gu[c + '|' + cat] || 0;
+    if (Math.abs(a) < 0.005 && Math.abs(b) < 0.005) continue;
+    linhasComp.push({ comp:c, cat, razao:a, guias:b, dif:r2(a - b) });
+  }
+  const difDe = (c, cat) => { const l = linhasComp.find(k => k.comp === c && k.cat === cat); return l ? l.dif : 0; };
+
+  // --- saldo
+  const apurado = r2(guias.reduce((s, x) => s + x.partes.filter(p => compKey(p.comp) <= fimKey).reduce((a, p) => a + p.valor, 0), 0));
+  const pagoGuias = r2(guias.filter(x => x.pago && x.pago <= fim).reduce((s, x) => s + x.g.total, 0));
+  const esperado = r2(R.saldoIni + apurado - pagoGuias);
+  const diferenca = r2(esperado - R.saldoFim);
+
+  // --- ajustes
+  const aj = [];
+  const add = o => aj.push(Object.assign({ incluir:true, conf:'alta', obs:'', opcional:false }, o));
+  const debCred = (valor, contaCredito0008) => valor >= 0 ? { debito:null, credito:C.fgts, valor } : { debito:C.fgts, credito:null, valor:-valor };
+  for (const c of comps){
+    const dataPad = fimDoMes(c);
+    // mensal
+    let g = -difDe(c, 'mensal');
+    if (Math.abs(g) >= 0.005){
+      const d13 = debito13[c] || 0;
+      if (d13 > 0 && g >= r2(2 * d13) - 0.005){
+        add({ comp:c, tipo:'13o-acerto', debito:C.prov13, credito:C.fgts, valor:r2(2 * d13), hist:'FGTS 13º SALÁRIO ' + compPonto(c) + ' (ACERTO)', data:dataPad,
+          obs:'O razão tem ' + fmtBR(d13) + ' de FGTS 13º lançado a DÉBITO em ' + c + ' (nos outros meses é crédito). Estorna o débito e lança o crédito correto = 2 × ' + fmtBR(d13) + '.' });
+        add({ comp:c, tipo:'13o-0001', debito:C.prov13, credito:C.salarios, valor:d13, hist:'ESTORNO FGTS 13º SALÁRIO ' + compPonto(c) + ' EM SALÁRIOS A PAGAR', data:dataPad, incluir:false, opcional:true, conf:'confirmar',
+          obs:'Só se o mesmo débito de ' + fmtBR(d13) + ' também estiver na ' + C.salarios + ' (Salários a pagar). Confira esse razão antes de marcar.' });
+        g = r2(g - 2 * d13);
+      }
+      if (Math.abs(g) >= 0.005){
+        const quem = guias.filter(x => x.tipo === 'rescisao' && x.partes.some(p => p.cat === 'mensal' && p.comp === c)).map(x => (x.nome || x.id) + ' ' + fmtBR(x.partes.filter(p => p.cat === 'mensal' && p.comp === c).reduce((a, p) => a + p.valor, 0)));
+        const dc = debCred(g);
+        add(Object.assign({ comp:c, tipo:'mensal-dif', hist:'FGTS MENSAL ' + compPonto(c) + ' - DIFERENCA GUIA X RAZAO', data:dataPad, conf:'confirmar',
+          obs:'Guias ' + (g > 0 ? 'maiores' : 'menores') + ' que o razão em ' + fmtBR(Math.abs(g)) + '. Provável FGTS 13º não lançado (confirmar na folha; se for FGTS 8%, trocar a conta por ' + C.despesa + ').' + (quem.length ? ' Obs.: a competência inclui partes mensais pagas em guias de rescisão (' + quem.join('; ') + ').' : '') },
+          dc.debito ? { debito:dc.debito, credito:C.prov13, valor:dc.valor } : { debito:C.prov13, credito:dc.credito, valor:dc.valor }));
+      }
+    }
+    // rescisório (+ multa 40%)
+    g = -difDe(c, 'resc');
+    if (Math.abs(g) >= 0.005){
+      const doComp = guias.filter(x => x.tipo === 'rescisao' && x.compResc === c);
+      const rzResc = rz[c + '|resc'] || 0;
+      if (Math.abs(rzResc) < 0.005 && g > 0 && doComp.length){
+        for (const x of doComp){
+          const v = x.partes.filter(p => p.cat === 'resc' && p.comp === c).reduce((a, p) => a + p.valor, 0);
+          add({ comp:c, tipo:'resc-func', guia:x.id, debito:C.despesa, credito:C.fgts, valor:r2(v), hist:'FGTS Rescisao - ' + (x.nome || '(INFORMAR NOME)'), data:dataPad, conf: x.nome ? 'alta' : 'confirmar',
+            obs:'GRRF paga em ' + (x.g.pago || '—') + ' (rescisório + multa 40%) sem provisão no razão em ' + c + '.' });
+        }
+      } else if (Math.abs(g) < 0.10){
+        const dc = debCred(g);
+        add(Object.assign({ comp:c, tipo:'centavos', hist:'ARREDONDAMENTO FGTS RESCISAO ' + compPonto(c), data:dataPad, incluir:false, conf:'baixa', obs:'Diferença de centavos entre a multa de 40% do razão e das guias. Opcional.' },
+          dc.debito ? { debito:dc.debito, credito:C.despesa, valor:dc.valor } : { debito:C.despesa, credito:dc.credito, valor:dc.valor }));
+      } else {
+        const dc = debCred(g);
+        add(Object.assign({ comp:c, tipo:'resc-dif', hist:'FGTS Rescisao ' + compPonto(c) + ' - DIFERENCA A APURAR', data:dataPad, conf:'confirmar',
+          obs:'O razão provisionou parte do rescisório de ' + c + ': faltam ' + fmtBR(Math.abs(g)) + ' (rescisório + multa). Não dá para ver por funcionário no razão (a folha lança por evento). Provável "FGTS 13º Sal.Resc.Dep." não lançado — confirmar na folha. Guias de rescisão da competência: ' + (doComp.map(x => x.nome || x.id).join(', ') || '—') + '.' },
+          dc.debito ? { debito:dc.debito, credito:C.prov13, valor:dc.valor } : { debito:C.prov13, credito:dc.credito, valor:dc.valor }));
+      }
+    }
+    // consignado
+    g = -difDe(c, 'cons');
+    if (Math.abs(g) >= 0.005){
+      const dc = debCred(g);
+      add(Object.assign({ comp:c, tipo:'cons', hist:'CONSIGNADO FGTS ' + compPonto(c) + ' - DIFERENCA', data:dataPad, conf:'confirmar', obs:'Consignado das guias x razão.' },
+        dc.debito ? { debito:dc.debito, credito:C.salarios, valor:dc.valor } : { debito:C.salarios, credito:dc.credito, valor:dc.valor }));
+    }
+    // juros/multa
+    g = -difDe(c, 'enc');
+    if (Math.abs(g) >= 0.005){
+      const dc = debCred(g);
+      add(Object.assign({ comp:c, tipo:'enc', hist:'JUROS/MULTA FGTS ' + compPonto(c), data:dataPad, conf:'confirmar', obs:'Encargos cobrados na guia (pagamento em atraso). Informe a conta de despesa de juros/multa.', needsConta:true },
+        dc.debito ? { debito:dc.debito, credito:C.juros, valor:dc.valor } : { debito:C.juros, credito:dc.credito, valor:dc.valor }));
+    }
+  }
+  aj.forEach((a, i) => { a.key = [a.comp, a.tipo, a.guia || ''].join('|'); a.ord = i; });
+
+  return { guias, semGuia, dataDiferente, comps, linhasComp, outros, ajustes:aj, contas:C,
+    saldo:{ ini:R.saldoIni, fim:R.saldoFim, apurado, pagoGuias, esperado, diferenca }, fim, foraPeriodo };
+}
+
+// efeito de um ajuste no crédito da conta de FGTS a recolher
+function efeitoFgts(a, contaFgts){ return a.credito === contaFgts ? a.valor : (a.debito === contaFgts ? -a.valor : 0); }
+
+/* ===================== RESUMOS PARA COPIAR E COLAR ===================== */
+function montarResumos(M, filtroMes){
+  const noMes = d => !filtroMes || (d && compDe(d) === filtroMes);
+  const L = (data, hist, valor) => fmtDMY(data) + '\t' + hist + '\t' + fmtBR(valor);
+  const linhasDaGuia = (x, sufixo) => {
+    const out = [];
+    const nome = x.tipo === 'rescisao' ? (x.nome || '(INFORMAR NOME)') : '';
+    out.push(L(x.pago || new Date(), (x.pag ? x.pag.hist : 'PGTO FGTS GUIA ' + x.id) + (x.pag ? '' : sufixo), x.pag ? x.pag.deb : x.g.total));
+    for (const p of x.partes){
+      const dt = fimDoMes(p.comp), cp = compPonto(p.comp);
+      let h;
+      if (x.tipo === 'rescisao'){
+        if (p.cat === 'resc') h = 'FGTS Rescisao - ' + nome;
+        else if (p.cat === 'mensal') h = 'FGTS Mensal ' + cp + ' - ' + nome;
+        else if (p.cat === 'cons') h = 'Consignado ' + cp + ' - ' + nome;
+        else h = 'FGTS Juros/Multa ' + cp + ' - ' + nome;
+      } else {
+        if (p.cat === 'mensal') h = 'FGTS Mensal ' + cp;
+        else if (p.cat === 'cons') h = 'Consignado ' + cp;
+        else h = 'FGTS Juros/Multa ' + cp;
+      }
+      out.push(L(dt, h, -p.valor));
+    }
+    return out;
+  };
+  const dest = tipo => {
+    const lista = M.guias.filter(x => x.tipo === tipo && noMes(x.pago));
+    const cmp = tipo === 'rescisao'
+      ? (a, b) => (a.nome || '\uffff').localeCompare(b.nome || '\uffff', 'pt-BR') || ((a.pago || 0) - (b.pago || 0))
+      : (a, b) => (compKey(a.partes[0] ? a.partes[0].comp : '01/1900') - compKey(b.partes[0] ? b.partes[0].comp : '01/1900')) || ((a.pago || 0) - (b.pago || 0));
+    const par = lista.filter(x => x.pag).sort(cmp), sem = lista.filter(x => !x.pag).sort(cmp);
+    let out = [];
+    par.forEach(x => out.push(...linhasDaGuia(x, '')));
+    if (sem.length){ if (out.length) out.push(''); sem.forEach(x => out.push(...linhasDaGuia(x, x.pago && x.pago > M.fim ? ' (PAGA APÓS O PERÍODO DO RAZÃO)' : ' (SEM LANÇAMENTO NO RAZÃO)'))); }
+    return out;
+  };
+  const mensal = dest('mensal');
+  const orf = M.semGuia.filter(p => noMes(p.data));
+  if (orf.length){ if (mensal.length) mensal.push(''); orf.forEach(p => mensal.push(L(p.data, p.hist + ' (SEM GUIA)', p.deb))); }
+  // Resumo unificado: todos os pagamentos em ordem de data; o que nao tem par vai para o final
+  const todas = M.guias.filter(x => noMes(x.pago));
+  const cmpU = (a, b) => ((a.pago || 0) - (b.pago || 0))
+    || ((a.tipo === 'rescisao' ? 1 : 0) - (b.tipo === 'rescisao' ? 1 : 0))
+    || (a.nome || '\uffff').localeCompare(b.nome || '\uffff', 'pt-BR');
+  const parU = todas.filter(x => x.pag).sort(cmpU), semU = todas.filter(x => !x.pag).sort(cmpU);
+  const unificado = [];
+  parU.forEach(x => unificado.push(...linhasDaGuia(x, '')));
+  if (semU.length){ if (unificado.length) unificado.push(''); semU.forEach(x => unificado.push(...linhasDaGuia(x, x.pago && x.pago > M.fim ? ' (PAGA APÓS O PERÍODO DO RAZÃO)' : ' (SEM LANÇAMENTO NO RAZÃO)'))); }
+  if (orf.length){ if (unificado.length) unificado.push(''); orf.forEach(p => unificado.push(L(p.data, p.hist + ' (SEM GUIA)', p.deb))); }
+  return { mensal, rescisao: dest('rescisao'), unificado };
+}
+
+/* ===================== PDF -> LINHAS (pdf.js só carrega quando precisa) ===================== */
+const PDFJS_BASE = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+let _pdfjsP = null;
+function carregarPdfJs(){
+  if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+  if (_pdfjsP) return _pdfjsP;
+  _pdfjsP = new Promise((ok, erro) => {
+    const sc = document.createElement('script');
+    sc.src = PDFJS_BASE + 'pdf.min.js';
+    sc.onload = () => window.pdfjsLib ? ok(window.pdfjsLib) : erro(new Error('leitor de PDF não carregou'));
+    sc.onerror = () => { _pdfjsP = null; erro(new Error('não consegui carregar o leitor de PDF (internet bloqueada?)')); };
+    document.head.appendChild(sc);
+  });
+  return _pdfjsP;
+}
+async function pdfParaLinhas(buf){
+  const lib = await carregarPdfJs();
+  try{
+    const r = await fetch(PDFJS_BASE + 'pdf.worker.min.js');
+    lib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(new Blob([await r.text()], { type:'text/javascript' }));
+  }catch(_){ lib.GlobalWorkerOptions.workerSrc = PDFJS_BASE + 'pdf.worker.min.js'; }
+  const pdf = await lib.getDocument({ data: new Uint8Array(buf) }).promise;
+  const linhas = [];
+  for (let p = 1; p <= pdf.numPages; p++){
+    const tc = await (await pdf.getPage(p)).getTextContent();
+    linhas.push(...agruparLinhas(tc.items));
+  }
+  return linhas;
+}
+
+/* ===================== ESTADO ===================== */
+const LS = { guias:'conciliacaoFgts_guias_v1', nomes:'conciliacaoFgts_nomes_v1', contas:'conciliacaoFgts_contas_v1', lista:'conciliacaoFgts_lista_v1' };
+const lsGet = (k, def) => { try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; }catch(_){ return def; } };
+const lsSet = (k, v) => { try{ localStorage.setItem(k, JSON.stringify(v)); }catch(_){} };
+
+const E = {
+  guias: new Map(),
+  razao: null, razaoNome: '',
+  nomesEdit: lsGet(LS.nomes, {}),
+  listaNomes: lsGet(LS.lista, []),
+  contas: (function(){ const c = Object.assign({}, CONTAS_PADRAO, lsGet(LS.contas, {})); if (!c.juros) c.juros = CONTAS_PADRAO.juros; return c; })(),
+  ajEdit: {},
+  empresa: '', dataUnica: '', filtroMes: ''
+};
+lsGet(LS.guias, []).forEach(g => E.guias.set(g.id, g));
+let M = null;
+
+const $ = id => document.getElementById(id);
+function toast(msg, tipo){
+  const t = document.createElement('div');
+  t.className = 'toast' + (tipo === 'err' ? ' toast-err' : tipo === 'ok' ? ' toast-ok' : '');
+  t.textContent = msg; $('toasts').appendChild(t);
+  setTimeout(() => t.remove(), tipo === 'err' ? 9000 : 4500);
+}
+async function salvarArquivo(filename, blob){
+  if (typeof window.claude !== 'undefined' && typeof window.claude.use === 'function'){
+    try{
+      const downloads = await window.claude.use('downloads');
+      if (downloads){ await downloads.save({ filename, data: blob }); return true; }
+    }catch(err){ alert('Não foi possível salvar o arquivo (' + (err && (err.code || err.message) || 'erro') + ').'); return false; }
+  }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename; a.click(); return true;
+}
+
+/* ===================== ARQUIVOS ===================== */
+async function tratarArquivos(lista){
+  let novas = 0, repetidas = 0;
+  $('progresso').textContent = 'Lendo arquivos...';
+  for (const f of lista){
+    const ext = (f.name.split('.').pop() || '').toLowerCase();
+    try{
+      if (ext === 'pdf'){
+        const g = parseGuiaLinhas(await pdfParaLinhas(await f.arrayBuffer()));
+        g.arquivo = f.name;
+        if (E.guias.has(g.id)) repetidas++; else { E.guias.set(g.id, g); novas++; }
+      } else if (ext === 'csv' || ext === 'txt'){
+        E.razao = parseRazao(decodificarBuffer(await f.arrayBuffer()));
+        E.razaoNome = f.name;
+        if (E.razao.empresa) $('empresa').value = E.razao.empresa;
+        if (E.razao.conta && E.razao.conta !== E.contas.fgts) toast('O razão é da conta ' + E.razao.conta + ' (a ferramenta espera ' + E.contas.fgts + '). Confira o campo "FGTS a recolher".', 'err');
+      } else toast('"' + f.name + '": formato não reconhecido (use PDF das guias e CSV do razão).', 'err');
+    }catch(err){ toast('"' + f.name + '": ' + (err && err.message ? err.message : err), 'err'); }
+  }
+  $('progresso').textContent = '';
+  lsSet(LS.guias, [...E.guias.values()]);
+  if (novas || repetidas) toast(novas + ' guia(s) nova(s) lida(s)' + (repetidas ? ' · ' + repetidas + ' já estava(m) carregada(s)' : '') + '.', 'ok');
+  recalcular();
+}
+function renderArquivos(){
+  const box = $('chips'); box.innerHTML = '';
+  const chip = (txt, onrm) => { const s = document.createElement('span'); s.className = 'file-chip'; s.innerHTML = esc(txt) + (onrm ? ' <span class="rm" title="remover">✕</span>' : ''); if (onrm) s.querySelector('.rm').onclick = onrm; box.appendChild(s); };
+  if (E.guias.size) chip(E.guias.size + ' guia(s) do FGTS Digital carregada(s)', () => { if (confirm('Remover todas as guias carregadas?')){ E.guias.clear(); lsSet(LS.guias, []); recalcular(); } });
+  if (E.razao) chip('Razão: ' + E.razaoNome + ' · conta ' + E.razao.conta + ' · até ' + fmtDMY(E.razao.periodoFim), () => { E.razao = null; E.razaoNome = ''; recalcular(); });
+}
+
+/* ===================== CÁLCULO + TELAS ===================== */
+const CAT = { mensal:'FGTS mensal / 13º', resc:'Rescisório + multa 40%', cons:'Consignado', enc:'Juros/multa' };
+function recalcular(){
+  renderArquivos();
+  const pronto = E.razao && E.guias.size;
+  ['step2', 'step3'].forEach(id => $(id).setAttribute('data-locked', pronto ? 'false' : 'true'));
+  $('pill2').classList.toggle('is-active', !!pronto); $('pill3').classList.toggle('is-active', !!pronto);
+  $('pill1').classList.toggle('is-done', !!pronto);
+  if (!pronto){ M = null; $('confTiles').innerHTML = ''; return; }
+  M = conciliar({ guias:E.guias, razao:E.razao, nomesEdit:E.nomesEdit, listaNomes:E.listaNomes, contas:E.contas });
+  renderConferencia(); renderAjustes(); renderResumos();
+}
+function statusGuia(x){
+  if (x.pag) return '<span class="tag tag-ok">no razão ' + esc(x.pag.dataStr) + '</span>' + (x.pag.dataStr !== x.g.pago ? ' <span class="tag tag-warn">data difere</span>' : '');
+  if (x.pago && x.pago > M.fim) return '<span class="tag tag-warn">paga após o período do razão</span>';
+  if (!x.pago) return '<span class="tag tag-warn">guia não paga</span>';
+  return '<span class="tag tag-err">paga e sem lançamento no razão</span>';
+}
+function alinhamento(x){
+  const out = [];
+  const lc = (c, cat) => M.linhasComp.find(k => k.comp === c && k.cat === cat);
+  for (const p of x.partes){
+    if (compKey(p.comp) > compKey(compDe(M.fim))) { out.push(CAT[p.cat] + ' ' + p.comp + ': ' + fmtBR(p.valor) + ' — fora do período do razão'); continue; }
+    const l = lc(p.comp, p.cat);
+    let st;
+    if (!l || Math.abs(l.dif) < 0.005) st = '<span class="ok">✓ competência fecha</span>';
+    else if (Math.abs(l.dif) < 0.10) st = '<span class="ok">✓ fecha (arredondamento de ' + fmtBR(Math.abs(l.dif)) + ')</span>';
+    else if (Math.abs(l.razao) < 0.005) st = '<span class="bad">✗ sem provisão no razão (ajuste)</span>';
+    else st = '<span class="bad">⚠ competência com diferença de ' + fmtBR(l.dif) + '</span>';
+    out.push(CAT[p.cat] + ' ' + p.comp + ': ' + fmtBR(p.valor) + ' — ' + st);
+  }
+  return out.join('<br>');
+}
+function renderConferencia(){
+  const S = M.saldo;
+  const semNome = M.guias.filter(x => x.tipo === 'rescisao' && !x.nome).length;
+  const tile = (n, l, cls) => '<div class="summary-tile ' + (cls || '') + '"><div class="n">' + n + '</div><div class="l">' + l + '</div></div>';
+  $('confTiles').innerHTML =
+    tile(M.guias.length, 'guias lidas', 'accent') +
+    tile(M.guias.filter(x => x.pag).length + ' / ' + E.razao.pagamentos.length, 'pagamentos do razão com guia', M.semGuia.length ? 'warn' : '') +
+    tile(fmtBR(S.fim), 'saldo do razão (crédito)') +
+    tile(fmtBR(S.esperado), 'saldo esperado pelas guias') +
+    tile(fmtBR(S.diferenca), 'falta creditar no razão', Math.abs(S.diferenca) > 0.005 ? 'warn' : '') +
+    tile(semNome, 'rescisões sem nome', semNome ? 'warn' : '');
+  const avisos = [];
+  if (Math.abs(S.ini) > 0.005) avisos.push('O razão começa o ano com saldo de ' + fmtBR(S.ini) + ' (crédito). Esse saldo não é movimentado pelas guias de ' + E.razao.periodoFim.getFullYear() + ' — ele não entra nos ajustes; vale investigar a origem.');
+  if (M.semGuia.length) avisos.push(M.semGuia.length + ' pagamento(s) do razão sem guia: ' + M.semGuia.map(p => p.dataStr + ' ' + fmtBR(p.deb)).join('; ') + '.');
+  if (M.outros.length) avisos.push(M.outros.length + ' lançamento(s) do razão que não consegui classificar (' + M.outros.slice(0, 3).map(x => x.hist).join(' | ') + '…): ficam fora da conferência por competência.');
+  $('confAvisos').innerHTML = avisos.map(a => '<div class="hint warn">⚠ ' + esc(a) + '</div>').join('');
+
+  // guias
+  const tb = $('tbGuias'); tb.innerHTML = '';
+  for (const x of M.guias){
+    const tr = document.createElement('tr');
+    const nomeCel = x.tipo === 'rescisao'
+      ? '<input type="text" class="cell-input nome-in' + (x.nome ? '' : ' falta') + '" data-id="' + esc(x.id) + '" value="' + esc(x.nome) + '" placeholder="nome do funcionário">'
+      : '<span class="muted">—</span>';
+    tr.innerHTML = '<td>' + (x.tipo === 'rescisao' ? '<span class="tag tag-debito">Rescisão</span>' : '<span class="tag tag-credito">Mensal</span>') + '</td>' +
+      '<td class="mono">' + esc(x.g.pago || '—') + '</td>' +
+      '<td class="mono small">' + esc(x.g.tag || '') + '</td>' +
+      '<td class="mono r">' + fmtBR(x.g.total) + '</td>' +
+      '<td>' + statusGuia(x) + '</td>' +
+      '<td>' + nomeCel + '</td>' +
+      '<td class="small">' + alinhamento(x) + '</td>';
+    tb.appendChild(tr);
+  }
+  tb.querySelectorAll('.nome-in').forEach(inp => inp.addEventListener('change', () => {
+    const v = inp.value.trim();
+    if (v) E.nomesEdit[inp.dataset.id] = v; else delete E.nomesEdit[inp.dataset.id];
+    lsSet(LS.nomes, E.nomesEdit); recalcular();
+  }));
+  // competências
+  const tc = $('tbComp'); tc.innerHTML = '';
+  for (const l of M.linhasComp){
+    const ok = Math.abs(l.dif) < 0.005;
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td class="mono">' + l.comp + '</td><td>' + CAT[l.cat] + '</td><td class="mono r">' + fmtBR(l.razao) + '</td><td class="mono r">' + fmtBR(l.guias) + '</td><td class="mono r ' + (ok ? 'okc' : 'badc') + '">' + (ok ? '—' : fmtBR(l.dif)) + '</td>';
+    tc.appendChild(tr);
+  }
+}
+
+/* ===================== AJUSTES ===================== */
+function ajEf(a){
+  const o = E.ajEdit[a.key] || {};
+  const e = Object.assign({}, a);
+  if (o.debito !== undefined) e.debito = o.debito;
+  if (o.credito !== undefined) e.credito = o.credito;
+  if (o.hist !== undefined) e.hist = o.hist;
+  if (o.data !== undefined) e.data = deIso(o.data) || a.data;
+  if (o.incluir !== undefined) e.incluir = o.incluir;
+  e.valida = !!(e.debito && e.credito && e.valor > 0 && e.data && e.hist);
+  return e;
+}
+function renderAjustes(){
+  const tb = $('tbAj'); tb.innerHTML = '';
+  if (!M.ajustes.length){ tb.innerHTML = '<tr><td colspan="9" class="empty-state">✓ Nada a ajustar: as guias e o razão fecham em todas as competências.</td></tr>'; atualizarTotaisAj(); return; }
+  for (const a of M.ajustes){
+    const e = ajEf(a);
+    const tr = document.createElement('tr'); tr.dataset.key = a.key;
+    if (!e.valida) tr.classList.add('row-warn');
+    tr.innerHTML =
+      '<td><input type="checkbox" class="aj-inc"' + (e.incluir && e.valida ? ' checked' : '') + (e.valida ? '' : ' disabled') + '></td>' +
+      '<td class="mono">' + a.comp + '</td>' +
+      '<td><input type="text" class="cell-input mono aj-deb' + (e.debito ? '' : ' falta') + '" value="' + esc(e.debito || '') + '" placeholder="conta débito"></td>' +
+      '<td><input type="text" class="cell-input mono aj-cred' + (e.credito ? '' : ' falta') + '" value="' + esc(e.credito || '') + '" placeholder="conta crédito"></td>' +
+      '<td class="mono r">' + fmtBR(a.valor) + '</td>' +
+      '<td><input type="text" class="cell-input aj-hist" value="' + esc(e.hist) + '"></td>' +
+      '<td><input type="date" class="cell-input aj-data" value="' + (e.data ? isoDe(e.data) : '') + '"></td>' +
+      '<td><span class="tag ' + (a.conf === 'alta' ? 'tag-ok' : a.conf === 'baixa' ? '' : 'tag-warn') + '">' + (a.conf === 'alta' ? 'alta' : a.conf === 'baixa' ? 'opcional' : 'confirmar') + '</span></td>' +
+      '<td class="small obs">' + esc(a.obs) + '</td>';
+    tb.appendChild(tr);
+    const set = (k, v) => { (E.ajEdit[a.key] = E.ajEdit[a.key] || {})[k] = v; };
+    tr.querySelector('.aj-inc').onchange = ev => { set('incluir', ev.target.checked); atualizarTotaisAj(); };
+    tr.querySelector('.aj-deb').onchange = ev => { set('debito', ev.target.value.trim()); renderAjustes(); };
+    tr.querySelector('.aj-cred').onchange = ev => { set('credito', ev.target.value.trim()); renderAjustes(); };
+    tr.querySelector('.aj-hist').onchange = ev => { set('hist', ev.target.value); atualizarTotaisAj(); };
+    tr.querySelector('.aj-data').onchange = ev => { set('data', ev.target.value); atualizarTotaisAj(); };
+  }
+  atualizarTotaisAj();
+}
+function ajustesMarcados(){
+  return M.ajustes.map(ajEf).filter(e => e.incluir && e.valida);
+}
+function atualizarTotaisAj(){
+  const sel = ajustesMarcados();
+  const efeito = r2(sel.reduce((s, e) => s + efeitoFgts(e, M.contas.fgts), 0));
+  const resta = r2(M.saldo.diferenca - efeito);
+  const ok = Math.abs(resta) < 0.005, quase = Math.abs(resta) < 0.10;
+  $('ajTiles').innerHTML =
+    '<div class="summary-tile accent"><div class="n">' + sel.length + '</div><div class="l">ajustes marcados</div></div>' +
+    '<div class="summary-tile"><div class="n">' + fmtBR(efeito) + '</div><div class="l">crédito líquido na ' + esc(M.contas.fgts) + '</div></div>' +
+    '<div class="summary-tile"><div class="n">' + fmtBR(M.saldo.diferenca) + '</div><div class="l">falta creditar (esperado − razão)</div></div>' +
+    '<div class="summary-tile ' + (ok ? '' : 'warn') + '"><div class="n">' + (ok ? '✓ fecha' : fmtBR(resta)) + '</div><div class="l">' + (ok ? 'ajustes explicam a diferença' : (quase ? 'resta (arredondamento: veja o ajuste opcional)' : 'ainda sem explicação')) + '</div></div>';
+  $('btnXlsx').disabled = !sel.length; $('btnCopiarAj').disabled = !sel.length;
+}
+function dataAj(e){ return E.dataUnica ? (deIso(E.dataUnica) || e.data) : e.data; }
+function codigoEmpresa(){ const v = parseInt(($('empresa').value || '').replace(/\D/g, ''), 10); return isNaN(v) ? null : v; }
+$('btnXlsx').addEventListener('click', async () => {
+  const sel = ajustesMarcados();
+  const cod = codigoEmpresa();
+  if (!cod){ toast('Informe o código da empresa.', 'err'); return; }
+  const hcod = parseInt($('histPadrao').value, 10) || 182;
+  const header = ['CÓDIGO EMPRESA*', 'DATA LANÇAMENTO*', 'CONTA DEBITO', 'CONTA CREDITO', 'CÓDIGO HISTÓRICO PADRÃO', 'COMPLEMENTO', 'VALOR LANÇAMENTO*', 'CENTRO CUSTO DEBITO', 'CENTRO CUSTO CREDITO', 'CÓDIGO AGRUPADOR'];
+  // data como número de série do Excel (inteiro) + formato dd/mm/aaaa: não depende do fuso horário do navegador
+  const serial = d => Math.round((Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(1899, 11, 30)) / 864e5);
+  const rows = sel.map(e => [cod, serial(dataAj(e)), e.debito, e.credito, hcod, e.hist, e.valor, null, null, null]);
+  const ws = XLSX.utils.aoa_to_sheet([header, ...rows]);
+  rows.forEach((_, i) => { const c = ws['B' + (i + 2)]; if (c) c.z = 'dd/mm/yyyy'; });
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Planilha1');
+  const d = M.fim;
+  const buf = XLSX.write(wb, { bookType:'xlsx', type:'array' });
+  if (await salvarArquivo('Ajuste FGTS ' + pad2(d.getMonth() + 1) + '-' + d.getFullYear() + '.xlsx', new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })))
+    toast(sel.length + ' lançamento(s) na planilha de importação.', 'ok');
+});
+$('btnCopiarAj').addEventListener('click', () => {
+  const t = ajustesMarcados().map(e => fmtDMY(dataAj(e)) + '\t' + e.hist + '\t' + fmtBR(e.valor) + '\t' + e.debito + '\t' + e.credito).join('\n');
+  copiar(t, 'Ajustes copiados (data, histórico, valor, débito, crédito).');
+});
+
+/* ===================== RESUMOS ===================== */
+function renderResumos(){
+  const meses = [...new Set(M.guias.filter(x => x.pago).map(x => compDe(x.pago)))].sort((a, b) => compKey(a) - compKey(b));
+  const sel = $('filtroMes');
+  const atual = E.filtroMes;
+  sel.innerHTML = '<option value="">Todos os pagamentos</option>' + meses.map(m => '<option value="' + m + '">' + m + '</option>').join('');
+  sel.value = meses.includes(atual) ? atual : ''; E.filtroMes = sel.value;
+  const R = montarResumos(M, E.filtroMes);
+  $('txtResumo').value = R.unificado.join('\n');
+  $('cntResumo').textContent = R.unificado.filter(Boolean).length + ' linha(s)';
+}
+async function copiar(texto, msg){
+  try{ await navigator.clipboard.writeText(texto); toast(msg, 'ok'); }
+  catch(_){
+    const ta = document.createElement('textarea'); ta.value = texto; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); toast(msg, 'ok'); }catch(e){ toast('Não consegui copiar: selecione o texto e use Ctrl+C.', 'err'); }
+    ta.remove();
+  }
+}
+$('btnCopiarResumo').addEventListener('click', () => copiar($('txtResumo').value, 'Resumo copiado.'));
+$('filtroMes').addEventListener('change', e => { E.filtroMes = e.target.value; renderResumos(); });
+
+/* ===================== PARÂMETROS ===================== */
+const CAMPOS_CONTA = { cFgts:'fgts', cDespesa:'despesa', cProv13:'prov13', cSalarios:'salarios', cJuros:'juros' };
+Object.entries(CAMPOS_CONTA).forEach(([id, k]) => {
+  $(id).value = E.contas[k] || '';
+  $(id).addEventListener('change', () => { E.contas[k] = $(id).value.trim(); lsSet(LS.contas, E.contas); E.ajEdit = {}; recalcular(); });
+});
+$('dataUnica').addEventListener('change', e => { E.dataUnica = e.target.value; atualizarTotaisAj(); });
+$('empresa').addEventListener('change', () => { E.empresa = $('empresa').value; });
+$('listaNomes').value = E.listaNomes.join('\n');
+$('listaNomes').addEventListener('change', e => { E.listaNomes = e.target.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean); lsSet(LS.lista, E.listaNomes); recalcular(); });
+
+/* ===================== DROPZONE ===================== */
+const dz = $('dropzone'), fi = $('fileInput');
+dz.addEventListener('click', () => fi.click());
+dz.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' '){ e.preventDefault(); fi.click(); } });
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('drag'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); if (e.dataTransfer.files.length) tratarArquivos([...e.dataTransfer.files]); });
+fi.addEventListener('change', () => { if (fi.files.length) tratarArquivos([...fi.files]); fi.value = ''; });
+recalcular();
+
+</script>
+</body>
+</html>
